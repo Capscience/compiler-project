@@ -51,8 +51,8 @@ impl TokenType {
         match self {
             Self::Identifier => Regex::new(r"^[a-zA-Z_]+[\w_-]*").unwrap(),
             Self::IntLiteral => Regex::new(r"^[0-9]+").unwrap(),
-            Self::Operator => Regex::new(r"^(and\b|or\b|<=|==|>=|[+\-=*/])").unwrap(),
-            Self::Delimiter => Regex::new(r"^(,|;|\(|\)|\{|\})").unwrap(),
+            Self::Operator => Regex::new(r"^(and\b|or\b|<=|==|>=|[><+\-=*/])").unwrap(),
+            Self::Delimiter => Regex::new(r"^[,;}{)(]").unwrap(),
             Self::WhiteSpace => Regex::new(r"^\s+").unwrap(),
             Self::Comment => Regex::new(r"^(//.*)|^/\*(.|\n)*?\*/").unwrap(),
         }
@@ -69,8 +69,11 @@ pub fn tokenize(source_code: &'static str) -> Vec<Token> {
     let mut position: usize = 0;
 
     while position < source_code.len() {
+        let mut match_found = false;
+
         for variant in TokenType::iter() {
             if let Some(re_match) = variant.pattern().find(&source_code[position..]) {
+                match_found = true;
                 if !variant.ignore() {
                     tokens.push(Token {
                         text: &source_code
@@ -82,6 +85,13 @@ pub fn tokenize(source_code: &'static str) -> Vec<Token> {
                 position += re_match.end();
                 break;
             }
+        }
+        if !match_found {
+            panic!(
+                "Error at {}: {}",
+                position,
+                source_code.to_string()[position..(position + 1)].to_string()
+            );
         }
     }
     tokens
