@@ -39,9 +39,9 @@ impl PartialEq for Token {
 pub enum TokenType {
     Comment,
     WhiteSpace,
+    Operator,
     Identifier,
     IntLiteral,
-    Operator,
     Delimiter,
 }
 
@@ -51,7 +51,7 @@ impl TokenType {
         match self {
             Self::Identifier => Regex::new(r"^[a-zA-Z_]+[\w_-]*").unwrap(),
             Self::IntLiteral => Regex::new(r"^[0-9]+").unwrap(),
-            Self::Operator => Regex::new(r"^(<=|==|>=|[+-=*/])").unwrap(),
+            Self::Operator => Regex::new(r"^(and\b|or\b|<=|==|>=|[+\-=*/])").unwrap(),
             Self::Delimiter => Regex::new(r"^(,|;|\(|\)|\{|\})").unwrap(),
             Self::WhiteSpace => Regex::new(r"^\s+").unwrap(),
             Self::Comment => Regex::new(r"^(//.*)|^/\*(.|\n)*?\*/").unwrap(),
@@ -60,11 +60,7 @@ impl TokenType {
 
     /// Returns whether a specific TokenType should be ignored in tokenization.
     pub fn ignore(&self) -> bool {
-        match self {
-            Self::Comment => true,
-            Self::WhiteSpace => true,
-            _ => false,
-        }
+        matches!(self, Self::Comment | Self::WhiteSpace)
     }
 }
 
@@ -88,7 +84,7 @@ pub fn tokenize(source_code: &'static str) -> Vec<Token> {
             }
         }
     }
-    return tokens;
+    tokens
 }
 
 #[cfg(test)]
@@ -151,7 +147,13 @@ mod tests {
 
     #[test]
     fn test_comment() {
-        assert_eq!(tokenize("// this is a comment"), vec![]);
+        assert_eq!(
+            tokenize(
+                "// this is a comment
+        test"
+            ),
+            vec![identifier("test")]
+        );
     }
 
     #[test]
@@ -165,6 +167,34 @@ mod tests {
         comment */"
             ),
             vec![]
+        );
+    }
+
+    #[test]
+    fn test_and_operator() {
+        assert_eq!(
+            tokenize("foo and bar"),
+            vec![identifier("foo"), operator("and"), identifier("bar")]
+        );
+        assert_eq!(
+            tokenize("anderson = 0"),
+            vec![identifier("anderson"), operator("="), intliteral("0")]
+        );
+    }
+
+    #[test]
+    fn test_or_operator() {
+        assert_eq!(
+            tokenize("foo or bar"),
+            vec![identifier("foo"), operator("or"), identifier("bar")]
+        );
+        assert_eq!(
+            tokenize("ore = 0"),
+            vec![identifier("ore"), operator("="), intliteral("0")]
+        );
+        assert_eq!(
+            tokenize("ore=0"),
+            vec![identifier("ore"), operator("="), intliteral("0")]
         );
     }
 }
