@@ -1,7 +1,6 @@
+use regex::Regex;
 use std::fmt;
 use std::ops::Range;
-
-use regex::Regex;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -12,6 +11,7 @@ pub struct Token {
     range: Option<Range<usize>>,
 }
 
+/// Simpler printing format for tokens.
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.text)
@@ -46,6 +46,7 @@ pub enum TokenType {
 }
 
 impl TokenType {
+    /// Get regex pattern for the specific TokenType.
     pub fn pattern(&self) -> Regex {
         match self {
             Self::Identifier => Regex::new(r"^[a-zA-Z_]+[\w_-]*").unwrap(),
@@ -57,6 +58,7 @@ impl TokenType {
         }
     }
 
+    /// Returns whether a specific TokenType should be ignored in tokenization.
     pub fn ignore(&self) -> bool {
         match self {
             Self::Comment => true,
