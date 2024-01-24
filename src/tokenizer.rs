@@ -6,9 +6,9 @@ use strum_macros::EnumIter;
 
 #[derive(Debug)]
 pub struct Token {
-    text: &'static str,
-    tokentype: TokenType,
-    range: Option<Range<usize>>,
+    pub text: String,
+    pub tokentype: TokenType,
+    pub range: Option<Range<usize>>,
 }
 
 /// Simpler printing format for tokens.
@@ -76,8 +76,9 @@ pub fn tokenize(source_code: &'static str) -> Vec<Token> {
                 match_found = true;
                 if !variant.ignore() {
                     tokens.push(Token {
-                        text: &source_code
-                            [(position + re_match.start())..(position + re_match.end())],
+                        text: source_code
+                            [(position + re_match.start())..(position + re_match.end())]
+                            .to_string(),
                         tokentype: variant,
                         range: Some((position + re_match.start())..(position + re_match.end())),
                     });
@@ -102,9 +103,9 @@ mod tests {
     use super::*;
 
     /// Helper function for creating indentifiers
-    fn identifier(text: &'static str) -> Token {
+    fn identifier(text: &str) -> Token {
         Token {
-            text,
+            text: text.to_string(),
             tokentype: TokenType::Identifier,
             range: None,
         }
@@ -113,7 +114,7 @@ mod tests {
     /// Helper function for creating delimiters
     fn delimiter(text: &'static str) -> Token {
         Token {
-            text,
+            text: text.to_string(),
             tokentype: TokenType::Delimiter,
             range: None,
         }
@@ -122,7 +123,7 @@ mod tests {
     /// Helper function for creating operators
     fn operator(text: &'static str) -> Token {
         Token {
-            text,
+            text: text.to_string(),
             tokentype: TokenType::Operator,
             range: None,
         }
@@ -131,7 +132,7 @@ mod tests {
     /// Helper function for creating intliterals
     fn intliteral(text: &'static str) -> Token {
         Token {
-            text,
+            text: text.to_string(),
             tokentype: TokenType::IntLiteral,
             range: None,
         }
