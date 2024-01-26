@@ -91,8 +91,8 @@ pub fn tokenize(source_code: &'static str) -> Vec<Token> {
             panic!(
                 "Error at {}: {}",
                 position,
-                source_code.to_string()[position..(position + 1)].to_string()
-            );
+                &source_code.to_string()[position..(position + 1)]
+            )
         }
     }
     tokens
