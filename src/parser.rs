@@ -5,11 +5,17 @@ use std::slice::Iter;
 
 pub fn parse(tokens: &[Token]) -> Result<Box<Expression>, String> {
     let mut iter = tokens.iter().peekable();
-    parse_expression(&mut iter)
+    let expression = parse_expression(&mut iter)?;
+
+    if iter.peek().is_some() {
+        Err(format!("Expected EOF, got {:?}", consume(&mut iter, None)).to_string())
+    } else {
+        Ok(expression)
+    }
 }
 
 fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
-    let mut left: Box<Expression> = parse_polynomial(iter).unwrap();
+    let mut left: Box<Expression> = parse_polynomial(iter)?;
     while iter.peek().is_some() {
         if !["<", ">"].contains(
             &iter
@@ -33,7 +39,7 @@ fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expressi
 }
 
 fn parse_polynomial(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
-    let mut left: Box<Expression> = parse_term(iter).unwrap();
+    let mut left: Box<Expression> = parse_term(iter)?;
     while iter.peek().is_some() {
         if !["+", "-"].contains(
             &iter
@@ -46,7 +52,7 @@ fn parse_polynomial(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expressi
         };
 
         let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
-        let right = parse_term(iter).unwrap();
+        let right = parse_term(iter)?;
         left = Box::new(Expression::BinaryOperation {
             left,
             operation,
@@ -57,7 +63,7 @@ fn parse_polynomial(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expressi
 }
 
 fn parse_term(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
-    let mut left = parse_factor(iter).unwrap();
+    let mut left = parse_factor(iter)?;
     while iter.peek().is_some() {
         if !["*", "/"].contains(
             &iter
@@ -70,7 +76,7 @@ fn parse_term(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, S
         };
 
         let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
-        let right = parse_factor(iter).unwrap();
+        let right = parse_factor(iter)?;
         left = Box::new(Expression::BinaryOperation {
             left,
             operation,
@@ -81,6 +87,9 @@ fn parse_term(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, S
 }
 
 fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    if iter.peek().is_none() {
+        return Err("No more tokens to read".to_string());
+    }
     let token = iter.peek().expect("Should never be None.");
     if token.text == "(" {
         return parse_parenthesized(iter);
@@ -149,7 +158,7 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
         if let Some(expected) = expected {
             for text in expected {
                 if text == token.text {
-                    let token = iter.next().unwrap();
+                    let token = iter.next()?;
                     return Some(token.text.clone());
                 }
             }
@@ -274,6 +283,17 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn test_parsing_nothing() {
+        assert!(parse(&[]).is_err());
+    }
+
+    #[test]
+    fn test_garbage_at_the_end() {
+        assert!(parse(&tokenize("1+1 1")).is_err());
+    }
+
     #[test]
     fn test_add_and_sub() {
         let expression = parse(&tokenize("1 + 1"));
