@@ -11,4 +11,9 @@ pub enum Expression {
         operation: String,
         right: Box<Expression>,
     },
+    IfClause {
+        condition: Box<Expression>,
+        if_block: Box<Expression>,
+        else_block: Option<Box<Expression>>,
+    },
 }

@@ -84,7 +84,10 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>,
     let token = iter.peek().expect("Should never be None.");
     if token.text == "(" {
         return parse_parenthesized(iter);
+    } else if token.text == "if" {
+        return parse_if_expression(iter);
     }
+
     match token.tokentype {
         TokenType::IntLiteral => parse_int_literal(iter),
         TokenType::Identifier => parse_identifier(iter),
@@ -97,6 +100,28 @@ fn parse_parenthesized(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expre
     let expression = parse_expression(iter)?;
     consume(iter, Some(vec![")"]));
     Ok(expression)
+}
+
+fn parse_if_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    consume(iter, Some(vec!["if"]));
+    let condition = parse_expression(iter)?;
+    consume(iter, Some(vec!["then"]));
+    let if_block = parse_expression(iter)?;
+
+    // Optional else block
+    let mut else_block = None;
+    if let Some(next) = iter.peek() {
+        if next.text == "else" {
+            consume(iter, Some(vec!["else"]));
+            else_block = Some(parse_expression(iter)?);
+        }
+    }
+
+    Ok(Box::new(Expression::IfClause {
+        condition,
+        if_block,
+        else_block,
+    }))
 }
 
 fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
@@ -139,6 +164,44 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_if_expression() {
+        let expression = parse(&tokenize("if 2 then 3"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::IfClause {
+                condition: Box::new(Expression::Literal {
+                    value: "2".to_string()
+                }),
+                if_block: Box::new(Expression::Literal {
+                    value: "3".to_string()
+                }),
+                else_block: None
+            })
+        );
+    }
+
+    #[test]
+    fn test_if_else() {
+        let expression = parse(&tokenize("if true then 3 else 1"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::IfClause {
+                condition: Box::new(Expression::Identifier {
+                    value: "true".to_string()
+                }),
+                if_block: Box::new(Expression::Literal {
+                    value: "3".to_string()
+                }),
+                else_block: Some(Box::new(Expression::Literal {
+                    value: "1".to_string()
+                }))
+            })
+        );
+    }
 
     #[test]
     fn test_comparison() {
