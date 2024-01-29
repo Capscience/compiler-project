@@ -9,6 +9,30 @@ pub fn parse(tokens: &[Token]) -> Result<Box<Expression>, String> {
 }
 
 fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    let mut left: Box<Expression> = parse_polynomial(iter).unwrap();
+    while iter.peek().is_some() {
+        if !["<", ">"].contains(
+            &iter
+                .peek()
+                .expect("Checked in while condition.")
+                .text
+                .as_str(),
+        ) {
+            break;
+        };
+
+        let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
+        let right = parse_polynomial(iter).unwrap();
+        left = Box::new(Expression::BinaryOperation {
+            left,
+            operation,
+            right,
+        });
+    }
+    Ok(left)
+}
+
+fn parse_polynomial(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
     let mut left: Box<Expression> = parse_term(iter).unwrap();
     while iter.peek().is_some() {
         if !["+", "-"].contains(
@@ -115,6 +139,45 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_comparison() {
+        let expression = parse(&tokenize("a < 1"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::BinaryOperation {
+                left: Box::new(Expression::Identifier {
+                    value: "a".to_string()
+                }),
+                operation: "<".to_string(),
+                right: Box::new(Expression::Literal {
+                    value: "1".to_string()
+                })
+            })
+        );
+
+        let expression = parse(&tokenize("x < 2 + 1"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::BinaryOperation {
+                left: Box::new(Expression::Identifier {
+                    value: "x".to_string()
+                }),
+                operation: "<".to_string(),
+                right: Box::new(Expression::BinaryOperation {
+                    left: Box::new(Expression::Literal {
+                        value: "2".to_string()
+                    }),
+                    operation: "+".to_string(),
+                    right: Box::new(Expression::Literal {
+                        value: "1".to_string()
+                    })
+                })
+            })
+        );
+    }
 
     #[test]
     fn test_identifier() {
