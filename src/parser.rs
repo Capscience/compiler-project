@@ -63,7 +63,7 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>,
     }
     match token.tokentype {
         TokenType::IntLiteral => parse_int_literal(iter),
-        // TokenType::Identifier => parse_identifier(iter),
+        TokenType::Identifier => parse_identifier(iter),
         _ => Err("Expected IntLiteral".to_string()),
     }
 }
@@ -82,6 +82,16 @@ fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Express
             value: consume(iter, None).expect("Should fail if None."),
         })),
         _ => Err("Expected IntLiteral".to_string()),
+    }
+}
+
+fn parse_identifier(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    let token = iter.peek().expect("Should never be None.");
+    match token.tokentype {
+        TokenType::Identifier => Ok(Box::new(Expression::Identifier {
+            value: consume(iter, None).expect("Should fail if None."),
+        })),
+        _ => Err("Expected identifier".to_string()),
     }
 }
 
@@ -106,6 +116,38 @@ mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
 
+    #[test]
+    fn test_identifier() {
+        let expression = parse(&tokenize("a + 1"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::BinaryOperation {
+                left: Box::new(Expression::Identifier {
+                    value: "a".to_string()
+                }),
+                operation: "+".to_string(),
+                right: Box::new(Expression::Literal {
+                    value: "1".to_string()
+                })
+            })
+        );
+
+        let expression = parse(&tokenize("variable + x"));
+
+        assert_eq!(
+            expression.unwrap(),
+            Box::new(Expression::BinaryOperation {
+                left: Box::new(Expression::Identifier {
+                    value: "variable".to_string()
+                }),
+                operation: "+".to_string(),
+                right: Box::new(Expression::Identifier {
+                    value: "x".to_string()
+                })
+            })
+        );
+    }
     #[test]
     fn test_add_and_sub() {
         let expression = parse(&tokenize("1 + 1"));
