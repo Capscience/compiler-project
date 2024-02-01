@@ -1,18 +1,29 @@
-use std::path::Path;
-
-use compiler_project::compile;
+use std::env;
 
 fn main() {
-    let source_code: &'static str = "
-    // This is placeholder stuff for testing tokenization.
-    fn testfunc(a/* inline comment */) {
-        if a > 10 then print_int(a);
-        // comment
-        b = a;
-        /* this
-            is
-            multiline comment */
-        return b;
-    }";
-    compile(source_code, Path::new("executable"));
+    let args: Vec<String> = env::args().collect();
+    match args.len() {
+        2 => match args[1].as_str() {
+            "interpret" => interpreter_cli(),
+            _ => {
+                usage();
+                std::process::exit(1);
+            }
+        },
+        _ => {
+            usage();
+            std::process::exit(1);
+        }
+    }
+}
+
+fn interpreter_cli() {
+    println!("WIP");
+}
+
+fn usage() {
+    println!("Usage:");
+    println!("\tcargo run -- <command> [args]\n");
+    println!("Commands:");
+    println!("\tinterpret");
 }
