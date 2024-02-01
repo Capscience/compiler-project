@@ -1,5 +1,6 @@
 /// Abstract source tree structs.
 pub mod ast;
+pub mod interpreter;
 pub mod parser;
 pub mod token;
 pub mod tokenizer;
