@@ -2,7 +2,7 @@ use strum::IntoEnumIterator;
 
 pub use crate::token::{Token, TokenType};
 
-pub fn tokenize(source_code: &'static str) -> Vec<Token> {
+pub fn tokenize(source_code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut position: usize = 0;
 

@@ -1,4 +1,6 @@
-use std::env;
+use std::{env, io::Write};
+
+use compiler_project::{interpreter::interpret, parser::parse, tokenizer::tokenize};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -18,7 +20,32 @@ fn main() {
 }
 
 fn interpreter_cli() {
-    println!("WIP");
+    println!("Limited functionality for now. Exit with Ctlr+C");
+    let mut line = String::new();
+    loop {
+        print!(">>> ");
+        let _ = std::io::stdout().flush();
+        line.clear();
+
+        if std::io::stdin().read_line(&mut line).is_ok() {
+            let tokens = tokenize(&line);
+            let ast = parse(&tokens);
+            if let Err(error) = ast {
+                println!("Error while parsing: {}", error);
+            } else {
+                let result = interpret(*ast.unwrap());
+                if let Err(error) = result {
+                    println!("Error while interpreting: {}", error);
+                } else {
+                    if let Some(num) = result.unwrap() {
+                        println!("{}", num);
+                    } else {
+                        println!("None");
+                    }
+                }
+            }
+        };
+    }
 }
 
 fn usage() {
