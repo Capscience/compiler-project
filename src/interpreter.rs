@@ -48,7 +48,13 @@ pub fn interpret(node: Expression) -> Result<Option<i32>, Box<dyn Error>> {
                 _ => return Err("Invalid binary operator".into()),
             }
         }
-        _ => todo!(),
+        Expression::Block { expressions } => {
+            let mut val = None;
+            for expression in expressions {
+                val = interpret(expression)?;
+            }
+            val
+        }
     };
 
     Ok(value)
