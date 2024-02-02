@@ -36,12 +36,10 @@ fn interpreter_cli() {
                 let result = interpret(*ast.unwrap());
                 if let Err(error) = result {
                     println!("Error while interpreting: {}", error);
+                } else if let Some(num) = result.unwrap() {
+                    println!("{}", num);
                 } else {
-                    if let Some(num) = result.unwrap() {
-                        println!("{}", num);
-                    } else {
-                        println!("None");
-                    }
+                    println!("None");
                 }
             }
         };

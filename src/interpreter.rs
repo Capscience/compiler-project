@@ -12,12 +12,10 @@ pub fn interpret(node: Expression) -> Result<Option<i32>, Box<dyn Error>> {
         } => {
             if interpret(*condition)? != Some(0) {
                 interpret(*if_block)?
+            } else if let Some(else_block) = else_block {
+                interpret(*else_block)?
             } else {
-                if let Some(else_block) = else_block {
-                    interpret(*else_block)?
-                } else {
-                    None
-                }
+                None
             }
         }
         Expression::BinaryOperation {
@@ -50,6 +48,7 @@ pub fn interpret(node: Expression) -> Result<Option<i32>, Box<dyn Error>> {
                 _ => return Err("Invalid binary operator".into()),
             }
         }
+        _ => todo!(),
     };
 
     Ok(value)
