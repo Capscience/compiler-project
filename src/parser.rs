@@ -5,13 +5,48 @@ use std::slice::Iter;
 
 pub fn parse(tokens: &[Token]) -> Result<Box<Expression>, String> {
     let mut iter = tokens.iter().peekable();
-    let expression = parse_expression(&mut iter)?;
+
+    let expression = parse_block(&mut iter)?;
 
     if iter.peek().is_some() {
         Err(format!("Expected EOF, got {:?}", consume(&mut iter, None)).to_string())
     } else {
         Ok(expression)
     }
+}
+
+fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    let mut block = Expression::Block {
+        expressions: Vec::new(),
+    };
+
+    while iter.peek().is_some() {
+        let next = iter.peek().expect("Checked on previous line").text.as_str();
+        match next {
+            "{" => {
+                consume(iter, Some(vec!["{"]));
+                block.push(*parse_block(iter)?);
+                consume(iter, Some(vec!["}"]));
+            }
+            "}" => {
+                break;
+            }
+            _ => {
+                block.push(*parse_expression(iter)?);
+                if let Some(token) = iter.peek() {
+                    if token.text.as_str() == ";" {
+                        consume(iter, Some(vec![";"]));
+                    } else if token.text.as_str() != "}" {
+                        return Err(format!("Expected end of block or EOF, got {}", token.text));
+                    }
+                }
+            }
+        }
+    }
+    if block.get_first().is_none() {
+        return Err("Expected expression, found nothing".to_string());
+    }
+    Ok(Box::new(block))
 }
 
 fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
@@ -27,8 +62,8 @@ fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expressi
             break;
         };
 
-        let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
-        let right = parse_polynomial(iter).unwrap();
+        let operation = consume(iter, Some(vec!["<", ">"])).expect("Should fail if None.");
+        let right = parse_polynomial(iter)?;
         left = Box::new(Expression::BinaryOperation {
             left,
             operation,
@@ -75,7 +110,7 @@ fn parse_term(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, S
             break;
         };
 
-        let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
+        let operation = consume(iter, Some(vec!["*", "/"])).expect("Should fail if None.");
         let right = parse_factor(iter)?;
         left = Box::new(Expression::BinaryOperation {
             left,
@@ -100,7 +135,7 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>,
     match token.tokentype {
         TokenType::IntLiteral => parse_int_literal(iter),
         TokenType::Identifier => parse_identifier(iter),
-        _ => Err("Expected IntLiteral".to_string()),
+        _ => Err(format!("Expected IntLiteral, got {:?}", token.text)),
     }
 }
 
@@ -162,9 +197,10 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
                     return Some(token.text.clone());
                 }
             }
+        } else {
+            let token = iter.next().expect("peek() is Some");
+            return Some(token.text.clone());
         }
-        let token = iter.next().expect("peek() is Some");
-        return Some(token.text.clone());
     }
     None
 }
@@ -175,12 +211,58 @@ mod tests {
     use crate::tokenizer::tokenize;
 
     #[test]
+    fn test_block() {
+        let expression = parse(&tokenize("{ 1 + 1 }"));
+        assert_eq!(
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail")
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
+                left: Box::new(Expression::Literal {
+                    value: "1".to_string()
+                }),
+                operation: "+".to_string(),
+                right: Box::new(Expression::Literal {
+                    value: "1".to_string()
+                })
+            }
+        );
+    }
+
+    #[test]
+    fn test_2_expressions() {
+        let block = parse(&tokenize("1; 2;")).unwrap();
+        let expressions = block
+            .expressions()
+            .expect("Should be Some, else test should fail");
+        assert_eq!(expressions.len(), 2);
+        assert_eq!(
+            expressions[0],
+            Expression::Literal {
+                value: "1".to_string()
+            }
+        );
+        assert_eq!(
+            expressions[1],
+            Expression::Literal {
+                value: "2".to_string()
+            }
+        );
+    }
+
+    #[test]
     fn test_if_expression() {
         let expression = parse(&tokenize("if 2 then 3"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::IfClause {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::IfClause {
                 condition: Box::new(Expression::Literal {
                     value: "2".to_string()
                 }),
@@ -188,7 +270,7 @@ mod tests {
                     value: "3".to_string()
                 }),
                 else_block: None
-            })
+            }
         );
     }
 
@@ -197,8 +279,11 @@ mod tests {
         let expression = parse(&tokenize("if true then 3 else 1"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::IfClause {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::IfClause {
                 condition: Box::new(Expression::Identifier {
                     value: "true".to_string()
                 }),
@@ -208,7 +293,7 @@ mod tests {
                 else_block: Some(Box::new(Expression::Literal {
                     value: "1".to_string()
                 }))
-            })
+            }
         );
     }
 
@@ -217,8 +302,11 @@ mod tests {
         let expression = parse(&tokenize("a < 1"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
                     value: "a".to_string()
                 }),
@@ -226,14 +314,17 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("x < 2 + 1"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
                     value: "x".to_string()
                 }),
@@ -247,7 +338,7 @@ mod tests {
                         value: "1".to_string()
                     })
                 })
-            })
+            }
         );
     }
 
@@ -256,8 +347,11 @@ mod tests {
         let expression = parse(&tokenize("a + 1"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
                     value: "a".to_string()
                 }),
@@ -265,14 +359,17 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("variable + x"));
 
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
                     value: "variable".to_string()
                 }),
@@ -280,26 +377,33 @@ mod tests {
                 right: Box::new(Expression::Identifier {
                     value: "x".to_string()
                 })
-            })
+            }
         );
     }
 
     #[test]
     fn test_parsing_nothing() {
-        assert!(parse(&[]).is_err());
+        let result = parse(&[]);
+        dbg!(&result);
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_garbage_at_the_end() {
-        assert!(parse(&tokenize("1+1 1")).is_err());
+        let result = parse(&tokenize("1+1 1"));
+        dbg!(&result);
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_add_and_sub() {
         let expression = parse(&tokenize("1 + 1"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
                     value: "1".to_string()
                 }),
@@ -307,13 +411,16 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("1 + 3 - 5"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
                     left: Box::new(Expression::Literal {
                         value: "1".to_string()
@@ -327,13 +434,16 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "5".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("5 + 3 - 1 + 3 - 5 + 10 + 1"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
                     left: Box::new(Expression::BinaryOperation {
                         left: Box::new(Expression::BinaryOperation {
@@ -371,7 +481,7 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string()
                 })
-            })
+            }
         )
     }
 
@@ -379,8 +489,11 @@ mod tests {
     fn test_mul_and_division() {
         let expression = parse(&tokenize("1 * 1"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
                     value: "1".to_string()
                 }),
@@ -388,13 +501,16 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("1 * 3 - 5"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
                     left: Box::new(Expression::Literal {
                         value: "1".to_string()
@@ -408,13 +524,16 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "5".to_string()
                 })
-            })
+            }
         );
 
         let expression = parse(&tokenize("5 + 3 * 1"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
                     value: "5".to_string()
                 }),
@@ -428,7 +547,7 @@ mod tests {
                         value: "1".to_string()
                     }),
                 })
-            })
+            }
         )
     }
 
@@ -436,8 +555,11 @@ mod tests {
     fn test_parentheses() {
         let expression = parse(&tokenize("(5 + 3) + 1"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
                     left: Box::new(Expression::Literal {
                         value: "5".to_string(),
@@ -451,13 +573,16 @@ mod tests {
                 right: Box::new(Expression::Literal {
                     value: "1".to_string(),
                 }),
-            })
+            }
         );
 
         let expression = parse(&tokenize("5 + (3 + 1)"));
         assert_eq!(
-            expression.unwrap(),
-            Box::new(Expression::BinaryOperation {
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
                     value: "5".to_string()
                 }),
@@ -471,7 +596,7 @@ mod tests {
                         value: "1".to_string()
                     }),
                 })
-            })
+            }
         )
     }
 }
