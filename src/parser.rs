@@ -239,7 +239,28 @@ mod tests {
     use crate::tokenizer::tokenize;
 
     #[test]
-    fn test_assigning() {
+    fn test_assignment() {
+        let expression = parse(&tokenize("a = 10"));
+
+        assert_eq!(
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
+                left: Box::new(Expression::Identifier {
+                    value: "a".to_string()
+                }),
+                operation: "=".to_string(),
+                right: Box::new(Expression::Literal {
+                    value: "10".to_string()
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn test_var_declaration() {
         let expression = parse(&tokenize("var a = 10"));
 
         assert_eq!(
