@@ -19,6 +19,9 @@ pub enum Expression {
     Block {
         expressions: Vec<Expression>,
     },
+    VarDeclaration {
+        identifier: String,
+    },
 }
 
 impl Expression {
