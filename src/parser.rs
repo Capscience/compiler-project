@@ -32,7 +32,7 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, 
                 break;
             }
             _ => {
-                block.push(*parse_expression(iter)?);
+                block.push(*parse_assignment(iter)?);
                 if let Some(token) = iter.peek() {
                     if token.text.as_str() == ";" {
                         consume(iter, Some(vec![";"]));
@@ -47,6 +47,23 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, 
         return Err("Expected expression, found nothing".to_string());
     }
     Ok(Box::new(block))
+}
+
+fn parse_assignment(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    let mut left = parse_expression(iter)?;
+    while iter.peek().is_some() {
+        if iter.peek().expect("Checked on previous line").text.as_str() != "=" {
+            break;
+        }
+        let operation = consume(iter, Some(vec!["="])).expect("Checked on previous if statement");
+        let right = parse_expression(iter)?;
+        left = Box::new(Expression::BinaryOperation {
+            left,
+            operation,
+            right,
+        })
+    }
+    Ok(left)
 }
 
 fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
@@ -126,10 +143,11 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>,
         return Err("No more tokens to read".to_string());
     }
     let token = iter.peek().expect("Should never be None.");
-    if token.text == "(" {
-        return parse_parenthesized(iter);
-    } else if token.text == "if" {
-        return parse_if_expression(iter);
+    match token.text.as_str() {
+        "(" => return parse_parenthesized(iter),
+        "if" => return parse_if_expression(iter),
+        "var" => return parse_var_declaration(iter),
+        _ => {}
     }
 
     match token.tokentype {
@@ -166,6 +184,16 @@ fn parse_if_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expre
         if_block,
         else_block,
     }))
+}
+
+fn parse_var_declaration(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
+    consume(iter, Some(vec!["var"]));
+    let identifier = parse_identifier(iter)?;
+    if let Expression::Identifier { value } = *identifier {
+        Ok(Box::new(Expression::VarDeclaration { identifier: value }))
+    } else {
+        Err(format!("Expected identifier, got {:?}", *identifier))
+    }
 }
 
 fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
@@ -209,6 +237,27 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_assigning() {
+        let expression = parse(&tokenize("var a = 10"));
+
+        assert_eq!(
+            expression
+                .unwrap()
+                .get_first()
+                .expect("Should be Some, else test should fail"),
+            &Expression::BinaryOperation {
+                left: Box::new(Expression::VarDeclaration {
+                    identifier: "a".to_string()
+                }),
+                operation: "=".to_string(),
+                right: Box::new(Expression::Literal {
+                    value: "10".to_string()
+                }),
+            }
+        );
+    }
 
     #[test]
     fn test_block() {
