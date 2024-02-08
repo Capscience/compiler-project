@@ -55,6 +55,7 @@ pub fn interpret(node: Expression) -> Result<Option<i32>, Box<dyn Error>> {
             }
             val
         }
+        Expression::VarDeclaration { identifier: _ } => todo!(),
     };
 
     Ok(value)
