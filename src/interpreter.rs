@@ -24,7 +24,7 @@ impl SymbolTable {
 
     pub fn set(&mut self, symbol: String, new_value: Value) -> Result<(), &str> {
         if let Some(value) = self.get(&symbol) {
-            if discriminant(value) != discriminant(&new_value) {
+            if value != &Value::None && discriminant(value) != discriminant(&new_value) {
                 return Err("Incompatible types!");
             } else {
                 self.symbols.insert(symbol, new_value);
@@ -91,7 +91,7 @@ impl Interpreter {
                 if let Some(&ref val) = identifier_value {
                     val.clone()
                 } else {
-                    return Err("Symbol does not exist!".into());
+                    return Err(format!("Use of undeclared variable '{}'", value).into());
                 }
             }
             Expression::IfClause {
@@ -112,20 +112,53 @@ impl Interpreter {
                 operation,
                 right,
             } => {
-                let Value::Int { value: a } = self.interpret(*left)? else {
-                    return Err("No value!".into());
+                let left_expr = *left;
+                let variable_name = match left_expr {
+                    Expression::Identifier { ref value } => value.to_string(),
+                    Expression::VarDeclaration { ref identifier } => identifier.to_string(),
+                    _ => String::new(),
                 };
-                let Value::Int { value: b } = self.interpret(*right)? else {
-                    return Err("No value!".into());
+                let left = self.interpret(left_expr)?;
+                let right = self.interpret(*right)?;
+                let a = if let Value::Int { value } = left {
+                    Some(value)
+                } else {
+                    None
+                };
+                let b = if let Value::Int { value } = right {
+                    Some(value)
+                } else {
+                    None
                 };
                 match operation.as_str() {
-                    "+" => Value::Int { value: a + b },
-                    "-" => Value::Int { value: a - b },
-                    "*" => Value::Int { value: a * b },
-                    "/" => Value::Int { value: a / b },
-                    "%" => Value::Int { value: a % b },
-                    "<" => Value::Bool { value: a < b },
-                    ">" => Value::Bool { value: a > b },
+                    "+" => Value::Int {
+                        value: a.ok_or("Invalid type!")? + b.ok_or("Invalid type!")?,
+                    },
+                    "-" => Value::Int {
+                        value: a.ok_or("Invalid type!")? - b.ok_or("Invalid type!")?,
+                    },
+                    "*" => Value::Int {
+                        value: a.ok_or("Invalid type!")? * b.ok_or("Invalid type!")?,
+                    },
+                    "/" => Value::Int {
+                        value: a.ok_or("Invalid type!")? / b.ok_or("Invalid type!")?,
+                    },
+                    "%" => Value::Int {
+                        value: a.ok_or("Invalid type!")? % b.ok_or("Invalid type!")?,
+                    },
+                    "<" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? < b.ok_or("Invalid type!")?,
+                    },
+                    ">" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? > b.ok_or("Invalid type!")?,
+                    },
+                    "=" => {
+                        if variable_name.is_empty() {
+                            return Err("Invalid assignment!".into());
+                        }
+                        let _ = self.symbol_table.set(variable_name.clone(), right)?;
+                        Value::None
+                    }
                     _ => return Err("Invalid binary operator".into()),
                 }
             }
@@ -151,11 +184,37 @@ impl Interpreter {
 
         Ok(value)
     }
+
+    #[cfg(test)]
+    pub fn get_variable(&self, symbol: &String) -> Option<&Value> {
+        self.symbol_table.get(symbol)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_variable_declaration() {
+        let mut interpreter = Interpreter::new();
+        let a = interpreter.interpret(Expression::BinaryOperation {
+            left: Box::new(Expression::VarDeclaration {
+                identifier: "a".to_string(),
+            }),
+            operation: "=".to_string(),
+            right: Box::new(Expression::Literal {
+                value: "10".to_string(),
+            }),
+        });
+        dbg!(&a);
+        assert!(a.is_ok());
+        assert_eq!(a.unwrap(), Value::None);
+        assert_eq!(
+            interpreter.get_variable(&String::from("a")),
+            Some(&Value::Int { value: 10 })
+        );
+    }
 
     #[test]
     fn test_literal() {
