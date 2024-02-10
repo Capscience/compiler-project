@@ -37,8 +37,8 @@ fn interpreter_cli() {
                 let result = interpreter.interpret(*ast.unwrap());
                 if let Err(error) = result {
                     println!("Error while interpreting: {}", error);
-                } else if let Some(num) = result.unwrap() {
-                    println!("{}", num);
+                } else if let Ok(value) = result {
+                    println!("{}", value);
                 } else {
                     println!("None");
                 }

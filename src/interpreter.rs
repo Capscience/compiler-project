@@ -1,4 +1,5 @@
 use crate::ast::Expression;
+use std::fmt::{self, Display};
 use std::{collections::HashMap, error::Error, mem::discriminant};
 
 #[derive(Default)]
@@ -46,10 +47,21 @@ impl SymbolTable {
     }
 }
 
-enum Value {
+#[derive(PartialEq, Debug, Copy, Clone)]
+pub enum Value {
     Int { value: i64 },
     Bool { value: bool },
     None,
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Int { value } => write!(f, "{}", value),
+            Value::Bool { value } => write!(f, "{}", value),
+            Value::None => write!(f, "None"),
+        }
+    }
 }
 
 pub struct Interpreter {
@@ -63,14 +75,23 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, node: Expression) -> Result<Option<i64>, Box<dyn Error>> {
+    pub fn interpret(&mut self, node: Expression) -> Result<Value, Box<dyn Error>> {
         let value = match node {
-            Expression::Literal { value } => Some(value.parse::<i64>()?),
-            Expression::Identifier { value } => {
-                if let Some(Value::Int { value }) = self.symbol_table.get(&value) {
-                    Some(*value)
+            Expression::Literal { value } => {
+                if let Ok(val) = value.parse::<bool>() {
+                    Value::Bool { value: val }
+                } else if let Ok(val) = value.parse::<i64>() {
+                    Value::Int { value: val }
                 } else {
-                    None
+                    return Err(format!("Invalid literal '{value}'").into());
+                }
+            }
+            Expression::Identifier { value } => {
+                let identifier_value = self.symbol_table.get(&value);
+                if let Some(&ref val) = identifier_value {
+                    val.clone()
+                } else {
+                    return Err("Symbol does not exist!".into());
                 }
             }
             Expression::IfClause {
@@ -78,12 +99,12 @@ impl Interpreter {
                 if_block,
                 else_block,
             } => {
-                if self.interpret(*condition)? != Some(0) {
+                if self.interpret(*condition)? == (Value::Bool { value: true }) {
                     self.interpret(*if_block)?
                 } else if let Some(else_block) = else_block {
                     self.interpret(*else_block)?
                 } else {
-                    None
+                    Value::None
                 }
             }
             Expression::BinaryOperation {
@@ -91,35 +112,27 @@ impl Interpreter {
                 operation,
                 right,
             } => {
-                let a = self.interpret(*left)?.expect("Invalid types");
-                let b = self.interpret(*right)?.expect("Invalid types");
+                let Value::Int { value: a } = self.interpret(*left)? else {
+                    return Err("No value!".into());
+                };
+                let Value::Int { value: b } = self.interpret(*right)? else {
+                    return Err("No value!".into());
+                };
                 match operation.as_str() {
-                    "+" => Some(a + b),
-                    "-" => Some(a - b),
-                    "*" => Some(a * b),
-                    "/" => Some(a / b),
-                    "%" => Some(a % b),
-                    "<" => {
-                        if a < b {
-                            Some(1)
-                        } else {
-                            Some(0)
-                        }
-                    }
-                    ">" => {
-                        if a > b {
-                            Some(1)
-                        } else {
-                            Some(0)
-                        }
-                    }
+                    "+" => Value::Int { value: a + b },
+                    "-" => Value::Int { value: a - b },
+                    "*" => Value::Int { value: a * b },
+                    "/" => Value::Int { value: a / b },
+                    "%" => Value::Int { value: a % b },
+                    "<" => Value::Bool { value: a < b },
+                    ">" => Value::Bool { value: a > b },
                     _ => return Err("Invalid binary operator".into()),
                 }
             }
             Expression::Block { expressions } => {
                 self.symbol_table =
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
-                let mut val = None;
+                let mut val = Value::None;
                 for expression in expressions {
                     val = self.interpret(expression)?;
                 }
@@ -130,7 +143,10 @@ impl Interpreter {
                 }
                 val
             }
-            Expression::VarDeclaration { identifier: _ } => todo!(),
+            Expression::VarDeclaration { identifier } => {
+                self.symbol_table.declare(identifier)?;
+                Value::None
+            }
         };
 
         Ok(value)
@@ -148,7 +164,7 @@ mod tests {
             value: "15".to_string(),
         });
         assert!(a.is_ok());
-        assert_eq!(a.unwrap(), Some(15));
+        assert_eq!(a.unwrap(), Value::Int { value: 15 });
     }
 
     #[test]
@@ -164,7 +180,7 @@ mod tests {
             }),
         });
         assert!(a.is_ok());
-        assert_eq!(a.unwrap(), Some(2));
+        assert_eq!(a.unwrap(), Value::Int { value: 2 });
 
         let b = interpreter.interpret(Expression::BinaryOperation {
             left: Box::new(Expression::Literal {
@@ -176,7 +192,7 @@ mod tests {
             }),
         });
         assert!(b.is_ok());
-        assert_eq!(b.unwrap(), Some(0));
+        assert_eq!(b.unwrap(), Value::Int { value: 0 });
     }
 
     #[test]
@@ -199,7 +215,7 @@ mod tests {
         });
         dbg!(&a);
         assert!(a.is_ok());
-        assert_eq!(a.unwrap(), Some(1));
+        assert_eq!(a.unwrap(), Value::Int { value: 1 });
 
         let b = interpreter.interpret(Expression::IfClause {
             condition: Box::new(Expression::BinaryOperation {
@@ -217,7 +233,7 @@ mod tests {
             else_block: None,
         });
         assert!(b.is_ok());
-        assert_eq!(b.unwrap(), None);
+        assert_eq!(b.unwrap(), Value::None);
 
         let c = interpreter.interpret(Expression::IfClause {
             condition: Box::new(Expression::BinaryOperation {
@@ -237,6 +253,6 @@ mod tests {
             })),
         });
         assert!(c.is_ok());
-        assert_eq!(c.unwrap(), Some(2));
+        assert_eq!(c.unwrap(), Value::Int { value: 2 });
     }
 }
