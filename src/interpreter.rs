@@ -26,10 +26,9 @@ impl SymbolTable {
         if let Some(value) = self.get(&symbol) {
             if value != &Value::None && discriminant(value) != discriminant(&new_value) {
                 return Err("Incompatible types!");
-            } else {
-                self.symbols.insert(symbol, new_value);
-                return Ok(());
             }
+            self.symbols.insert(symbol, new_value);
+            return Ok(());
         }
         if let Some(parent) = &mut self.parent {
             return parent.set(symbol, new_value);
@@ -38,7 +37,7 @@ impl SymbolTable {
     }
 
     pub fn declare(&mut self, symbol: String) -> Result<(), &str> {
-        if let Some(_) = self.get(&symbol) {
+        if self.get(&symbol).is_some() {
             Err("Variable already exists!")
         } else {
             self.symbols.insert(symbol, Value::None);
@@ -68,6 +67,12 @@ pub struct Interpreter {
     symbol_table: SymbolTable,
 }
 
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
@@ -88,8 +93,8 @@ impl Interpreter {
             }
             Expression::Identifier { value } => {
                 let identifier_value = self.symbol_table.get(&value);
-                if let Some(&ref val) = identifier_value {
-                    val.clone()
+                if let Some(val) = identifier_value {
+                    *val
                 } else {
                     return Err(format!("Use of undeclared variable '{}'", value).into());
                 }
@@ -156,7 +161,7 @@ impl Interpreter {
                         if variable_name.is_empty() {
                             return Err("Invalid assignment!".into());
                         }
-                        let _ = self.symbol_table.set(variable_name.clone(), right)?;
+                        self.symbol_table.set(variable_name.clone(), right)?;
                         Value::None
                     }
                     _ => return Err("Invalid binary operator".into()),
