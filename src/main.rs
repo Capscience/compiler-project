@@ -34,13 +34,13 @@ fn interpreter_cli() {
             if let Err(error) = ast {
                 println!("Error while parsing: {}", error);
             } else {
-                let result = interpreter.interpret(*ast.unwrap());
-                if let Err(error) = result {
-                    println!("Error while interpreting: {}", error);
-                } else if let Ok(value) = result {
-                    println!("{}", value);
-                } else {
-                    println!("None");
+                for expression in ast.unwrap() {
+                    let result = interpreter.interpret(expression);
+                    if let Err(error) = result {
+                        println!("Error while interpreting: {}", error);
+                    } else if let Ok(value) = result {
+                        println!("{}", value);
+                    }
                 }
             }
         };

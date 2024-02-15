@@ -3,15 +3,37 @@ use crate::tokenizer::{Token, TokenType};
 use std::iter::Peekable;
 use std::slice::Iter;
 
-pub fn parse(tokens: &[Token]) -> Result<Box<Expression>, String> {
+pub fn parse(tokens: &[Token]) -> Result<Vec<Expression>, String> {
     let mut iter = tokens.iter().peekable();
+    let mut expressions = Vec::new();
 
-    let expression = parse_block(&mut iter)?;
+    while iter.peek().is_some() {
+        let next = iter.peek().expect("Checked on previous line").text.as_str();
+        match next {
+            "{" => {
+                consume(&mut iter, Some(vec!["{"]));
+                expressions.push(*parse_block(&mut iter)?);
+                consume(&mut iter, Some(vec!["}"]));
+            }
+            _ => {
+                expressions.push(*parse_assignment(&mut iter)?);
+                if let Some(token) = iter.peek() {
+                    if token.text.as_str() == ";" {
+                        consume(&mut iter, Some(vec![";"]));
+                    } else if token.text.as_str() != "}" {
+                        return Err(format!("Expected end of block or EOF, got {}", token.text));
+                    }
+                }
+            }
+        }
+    }
 
-    if iter.peek().is_some() {
+    if expressions.is_empty() {
+        Err("Expected expression, found nothing".to_string())
+    } else if iter.peek().is_some() {
         Err(format!("Expected EOF, got {:?}", consume(&mut iter, None)).to_string())
     } else {
-        Ok(expression)
+        Ok(expressions)
     }
 }
 
@@ -245,7 +267,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
@@ -266,7 +288,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::VarDeclaration {
@@ -286,7 +308,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail")
                 .get_first()
                 .expect("Should be Some, else test should fail"),
@@ -304,10 +326,7 @@ mod tests {
 
     #[test]
     fn test_2_expressions() {
-        let block = parse(&tokenize("1; 2;")).unwrap();
-        let expressions = block
-            .expressions()
-            .expect("Should be Some, else test should fail");
+        let expressions = parse(&tokenize("1; 2;")).unwrap();
         assert_eq!(expressions.len(), 2);
         assert_eq!(
             expressions[0],
@@ -330,7 +349,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::IfClause {
                 condition: Box::new(Expression::Literal {
@@ -351,7 +370,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::IfClause {
                 condition: Box::new(Expression::Identifier {
@@ -374,7 +393,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
@@ -392,7 +411,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
@@ -419,7 +438,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
@@ -437,7 +456,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Identifier {
@@ -471,7 +490,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
@@ -488,7 +507,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
@@ -511,7 +530,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
@@ -561,7 +580,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
@@ -578,7 +597,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
@@ -601,7 +620,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
@@ -627,7 +646,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::BinaryOperation {
@@ -650,7 +669,7 @@ mod tests {
         assert_eq!(
             expression
                 .unwrap()
-                .get_first()
+                .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::BinaryOperation {
                 left: Box::new(Expression::Literal {
