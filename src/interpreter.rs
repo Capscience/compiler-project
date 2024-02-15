@@ -17,13 +17,15 @@ impl SymbolTable {
     pub fn get(&self, symbol: &String) -> Option<&Value> {
         if let Some(value) = self.symbols.get(symbol) {
             Some(value)
+        } else if let Some(parent) = &self.parent {
+            parent.get(symbol)
         } else {
             None
         }
     }
 
     pub fn set(&mut self, symbol: String, new_value: Value) -> Result<(), &str> {
-        if let Some(value) = self.get(&symbol) {
+        if let Some(value) = self.symbols.get(&symbol) {
             if value != &Value::None && discriminant(value) != discriminant(&new_value) {
                 return Err("Incompatible types!");
             }
