@@ -231,9 +231,17 @@ fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Express
 fn parse_identifier(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expression>, String> {
     let token = iter.peek().expect("Should never be None.");
     match token.tokentype {
-        TokenType::Identifier => Ok(Box::new(Expression::Identifier {
-            value: consume(iter, None).expect("Should fail if None."),
-        })),
+        TokenType::Identifier => {
+            if ["true", "false"].contains(&token.text.as_str()) {
+                Ok(Box::new(Expression::Literal {
+                    value: consume(iter, None).expect("Should fail if None."),
+                }))
+            } else {
+                Ok(Box::new(Expression::Identifier {
+                    value: consume(iter, None).expect("Should fail if None."),
+                }))
+            }
+        }
         _ => Err("Expected identifier".to_string()),
     }
 }
@@ -259,6 +267,33 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_boolean_literal() {
+        let expression = parse(&tokenize("true"));
+        assert!(expression.is_ok());
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Should be Some, else the test should fail"),
+            &Expression::Literal {
+                value: "true".to_string()
+            }
+        );
+
+        let expression = parse(&tokenize("false"));
+        assert!(expression.is_ok());
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Should be Some, else the test should fail"),
+            &Expression::Literal {
+                value: "false".to_string()
+            }
+        )
+    }
 
     #[test]
     fn test_assignment() {
@@ -373,7 +408,7 @@ mod tests {
                 .first()
                 .expect("Should be Some, else test should fail"),
             &Expression::IfClause {
-                condition: Box::new(Expression::Identifier {
+                condition: Box::new(Expression::Literal {
                     value: "true".to_string()
                 }),
                 if_block: Box::new(Expression::Literal {
