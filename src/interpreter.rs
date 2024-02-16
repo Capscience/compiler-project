@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::{Expr, ExprKind};
 use crate::variable::{SymbolTable, Value};
 use std::error::Error;
 
@@ -19,9 +19,9 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, node: Expression) -> Result<Value, Box<dyn Error>> {
-        let value = match node {
-            Expression::Literal { value } => {
+    pub fn interpret(&mut self, node: Expr) -> Result<Value, Box<dyn Error>> {
+        let value = match node.content {
+            ExprKind::Literal { value } => {
                 if let Ok(val) = value.parse::<bool>() {
                     Value::Bool { value: val }
                 } else if let Ok(val) = value.parse::<i64>() {
@@ -30,7 +30,7 @@ impl Interpreter {
                     return Err(format!("Invalid literal '{value}'").into());
                 }
             }
-            Expression::Identifier { value } => {
+            ExprKind::Identifier { value } => {
                 let identifier_value = self.symbol_table.get(&value);
                 if let Some(val) = identifier_value {
                     *val
@@ -38,7 +38,7 @@ impl Interpreter {
                     return Err(format!("Use of undeclared variable '{}'", value).into());
                 }
             }
-            Expression::IfClause {
+            ExprKind::IfClause {
                 condition,
                 if_block,
                 else_block,
@@ -51,15 +51,15 @@ impl Interpreter {
                     Value::None
                 }
             }
-            Expression::BinaryOperation {
+            ExprKind::BinaryOperation {
                 left,
                 operation,
                 right,
             } => {
                 let left_expr = *left;
-                let variable_name = match left_expr {
-                    Expression::Identifier { ref value } => value.to_string(),
-                    Expression::VarDeclaration { ref identifier } => identifier.to_string(),
+                let variable_name = match left_expr.content {
+                    ExprKind::Identifier { ref value } => value.to_string(),
+                    ExprKind::VarDeclaration { ref identifier } => identifier.to_string(),
                     _ => String::new(),
                 };
                 let left = self.interpret(left_expr)?;
@@ -106,7 +106,7 @@ impl Interpreter {
                     _ => return Err("Invalid binary operator".into()),
                 }
             }
-            Expression::Block { expressions } => {
+            ExprKind::Block { expressions } => {
                 self.symbol_table =
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
                 let mut val = Value::None;
@@ -120,7 +120,7 @@ impl Interpreter {
                 }
                 val
             }
-            Expression::VarDeclaration { identifier } => {
+            ExprKind::VarDeclaration { identifier } => {
                 self.symbol_table.declare(identifier)?;
                 Value::None
             }
@@ -142,15 +142,20 @@ mod tests {
     #[test]
     fn test_variable_declaration() {
         let mut interpreter = Interpreter::new();
-        let a = interpreter.interpret(Expression::BinaryOperation {
-            left: Box::new(Expression::VarDeclaration {
-                identifier: "a".to_string(),
-            }),
-            operation: "=".to_string(),
-            right: Box::new(Expression::Literal {
-                value: "10".to_string(),
-            }),
-        });
+        let a = interpreter.interpret(
+            ExprKind::BinaryOperation {
+                left: ExprKind::VarDeclaration {
+                    identifier: "a".to_string(),
+                }
+                .into(),
+                operation: "=".to_string(),
+                right: ExprKind::Literal {
+                    value: "10".to_string(),
+                }
+                .into(),
+            }
+            .into(),
+        );
         dbg!(&a);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), Value::None);
@@ -163,9 +168,12 @@ mod tests {
     #[test]
     fn test_literal() {
         let mut interpreter = Interpreter::new();
-        let a = interpreter.interpret(Expression::Literal {
-            value: "15".to_string(),
-        });
+        let a = interpreter.interpret(
+            ExprKind::Literal {
+                value: "15".to_string(),
+            }
+            .into(),
+        );
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), Value::Int { value: 15 });
     }
@@ -173,27 +181,37 @@ mod tests {
     #[test]
     fn test_bin_op() {
         let mut interpreter = Interpreter::new();
-        let a = interpreter.interpret(Expression::BinaryOperation {
-            left: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-            operation: "+".to_string(),
-            right: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-        });
+        let a = interpreter.interpret(
+            ExprKind::BinaryOperation {
+                left: ExprKind::Literal {
+                    value: "1".to_string(),
+                }
+                .into(),
+                operation: "+".to_string(),
+                right: ExprKind::Literal {
+                    value: "1".to_string(),
+                }
+                .into(),
+            }
+            .into(),
+        );
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), Value::Int { value: 2 });
 
-        let b = interpreter.interpret(Expression::BinaryOperation {
-            left: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-            operation: "-".to_string(),
-            right: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-        });
+        let b = interpreter.interpret(
+            ExprKind::BinaryOperation {
+                left: ExprKind::Literal {
+                    value: "1".to_string(),
+                }
+                .into(),
+                operation: "-".to_string(),
+                right: ExprKind::Literal {
+                    value: "1".to_string(),
+                }
+                .into(),
+            }
+            .into(),
+        );
         assert!(b.is_ok());
         assert_eq!(b.unwrap(), Value::Int { value: 0 });
     }
@@ -201,60 +219,84 @@ mod tests {
     #[test]
     fn test_if() {
         let mut interpreter = Interpreter::new();
-        let a = interpreter.interpret(Expression::IfClause {
-            condition: Box::new(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
+        let a = interpreter.interpret(
+            ExprKind::IfClause {
+                condition: ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "1".to_string(),
+                    }
+                    .into(),
+                    operation: "<".to_string(),
+                    right: ExprKind::Literal {
+                        value: "2".to_string(),
+                    }
+                    .into(),
+                }
+                .into(),
+                if_block: ExprKind::Literal {
                     value: "1".to_string(),
-                }),
-                operation: "<".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "2".to_string(),
-                }),
-            }),
-            if_block: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-            else_block: None,
-        });
+                }
+                .into(),
+                else_block: None,
+            }
+            .into(),
+        );
         dbg!(&a);
         assert!(a.is_ok());
         assert_eq!(a.unwrap(), Value::Int { value: 1 });
 
-        let b = interpreter.interpret(Expression::IfClause {
-            condition: Box::new(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
+        let b = interpreter.interpret(
+            ExprKind::IfClause {
+                condition: ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "1".to_string(),
+                    }
+                    .into(),
+                    operation: ">".to_string(),
+                    right: ExprKind::Literal {
+                        value: "2".to_string(),
+                    }
+                    .into(),
+                }
+                .into(),
+                if_block: ExprKind::Literal {
                     value: "1".to_string(),
-                }),
-                operation: ">".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "2".to_string(),
-                }),
-            }),
-            if_block: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-            else_block: None,
-        });
+                }
+                .into(),
+                else_block: None,
+            }
+            .into(),
+        );
         assert!(b.is_ok());
         assert_eq!(b.unwrap(), Value::None);
 
-        let c = interpreter.interpret(Expression::IfClause {
-            condition: Box::new(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
+        let c = interpreter.interpret(
+            ExprKind::IfClause {
+                condition: ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "1".to_string(),
+                    }
+                    .into(),
+                    operation: ">".to_string(),
+                    right: ExprKind::Literal {
+                        value: "2".to_string(),
+                    }
+                    .into(),
+                }
+                .into(),
+                if_block: ExprKind::Literal {
                     value: "1".to_string(),
-                }),
-                operation: ">".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "2".to_string(),
-                }),
-            }),
-            if_block: Box::new(Expression::Literal {
-                value: "1".to_string(),
-            }),
-            else_block: Some(Box::new(Expression::Literal {
-                value: "2".to_string(),
-            })),
-        });
+                }
+                .into(),
+                else_block: Some(
+                    ExprKind::Literal {
+                        value: "2".to_string(),
+                    }
+                    .into(),
+                ),
+            }
+            .into(),
+        );
         assert!(c.is_ok());
         assert_eq!(c.unwrap(), Value::Int { value: 2 });
     }

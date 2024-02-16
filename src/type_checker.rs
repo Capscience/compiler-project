@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::{Expr, ExprKind};
 use crate::variable::{SymbolTable, Value};
 use std::error::Error;
 use std::mem::discriminant;
@@ -20,9 +20,9 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck(&mut self, node: Expression) -> Result<Value, Box<dyn Error>> {
-        let value = match node {
-            Expression::Literal { value } => {
+    pub fn typecheck(&mut self, node: Expr) -> Result<Value, Box<dyn Error>> {
+        let value = match node.content {
+            ExprKind::Literal { value } => {
                 if let Ok(val) = value.parse::<bool>() {
                     Value::Bool { value: val }
                 } else if let Ok(val) = value.parse::<i64>() {
@@ -31,7 +31,7 @@ impl TypeChecker {
                     return Err(format!("Invalid literal '{value}'").into());
                 }
             }
-            Expression::Identifier { value } => {
+            ExprKind::Identifier { value } => {
                 let identifier_value = self.symbol_table.get(&value);
                 if let Some(val) = identifier_value {
                     *val
@@ -39,7 +39,7 @@ impl TypeChecker {
                     return Err(format!("Use of undeclared variable '{}'", value).into());
                 }
             }
-            Expression::IfClause {
+            ExprKind::IfClause {
                 condition,
                 if_block,
                 else_block,
@@ -60,15 +60,15 @@ impl TypeChecker {
                     Value::None
                 }
             }
-            Expression::BinaryOperation {
+            ExprKind::BinaryOperation {
                 left,
                 operation,
                 right,
             } => {
                 let left_expr = *left;
-                let variable_name = match left_expr {
-                    Expression::Identifier { ref value } => value.to_string(),
-                    Expression::VarDeclaration { ref identifier } => identifier.to_string(),
+                let variable_name = match left_expr.content {
+                    ExprKind::Identifier { ref value } => value.to_string(),
+                    ExprKind::VarDeclaration { ref identifier } => identifier.to_string(),
                     _ => String::new(),
                 };
                 let left = self.typecheck(left_expr)?;
@@ -111,7 +111,7 @@ impl TypeChecker {
                     }
                 }
             }
-            Expression::Block { expressions } => {
+            ExprKind::Block { expressions } => {
                 self.symbol_table =
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
                 let mut val = Value::None;
@@ -125,7 +125,7 @@ impl TypeChecker {
                 }
                 val
             }
-            Expression::VarDeclaration { identifier } => {
+            ExprKind::VarDeclaration { identifier } => {
                 self.symbol_table.declare(identifier)?;
                 Value::None
             }
@@ -144,24 +144,33 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             checker
-                .typecheck(Expression::Literal {
-                    value: "1".to_string()
-                })
+                .typecheck(
+                    ExprKind::Literal {
+                        value: "1".to_string()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::Int { value: _ }
         ));
         assert!(matches!(
             checker
-                .typecheck(Expression::Literal {
-                    value: "true".to_string()
-                })
+                .typecheck(
+                    ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::Bool { value: _ }
         ));
         assert!(checker
-            .typecheck(Expression::Literal {
-                value: "should_fail".to_string()
-            })
+            .typecheck(
+                ExprKind::Literal {
+                    value: "should_fail".to_string()
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -170,44 +179,59 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
-                .typecheck(Expression::BinaryOperation {
-                    left: Box::new(Expression::VarDeclaration {
-                        identifier: "a".to_string()
-                    }),
-                    operation: "=".to_string(),
-                    right: Box::new(Expression::Literal {
-                        value: "1".to_string()
-                    })
-                })
+                .typecheck(
+                    ExprKind::BinaryOperation {
+                        left: ExprKind::VarDeclaration {
+                            identifier: "a".to_string()
+                        }
+                        .into(),
+                        operation: "=".to_string(),
+                        right: ExprKind::Literal {
+                            value: "1".to_string()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::None
         ));
 
         assert!(matches!(
             &checker
-                .typecheck(Expression::BinaryOperation {
-                    left: Box::new(Expression::Identifier {
-                        value: "a".to_string()
-                    }),
-                    operation: "=".to_string(),
-                    right: Box::new(Expression::Literal {
-                        value: "3".to_string()
-                    })
-                })
+                .typecheck(
+                    ExprKind::BinaryOperation {
+                        left: ExprKind::Identifier {
+                            value: "a".to_string()
+                        }
+                        .into(),
+                        operation: "=".to_string(),
+                        right: ExprKind::Literal {
+                            value: "3".to_string()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::None
         ));
 
         assert!(&checker
-            .typecheck(Expression::BinaryOperation {
-                left: Box::new(Expression::Identifier {
-                    value: "a".to_string()
-                }),
-                operation: "=".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "false".to_string()
-                })
-            })
+            .typecheck(
+                ExprKind::BinaryOperation {
+                    left: ExprKind::Identifier {
+                        value: "a".to_string()
+                    }
+                    .into(),
+                    operation: "=".to_string(),
+                    right: ExprKind::Literal {
+                        value: "false".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -216,15 +240,20 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
-                .typecheck(Expression::BinaryOperation {
-                    left: Box::new(Expression::Literal {
-                        value: "3".to_string()
-                    }),
-                    operation: ">".to_string(),
-                    right: Box::new(Expression::Literal {
-                        value: "1".to_string()
-                    })
-                })
+                .typecheck(
+                    ExprKind::BinaryOperation {
+                        left: ExprKind::Literal {
+                            value: "3".to_string()
+                        }
+                        .into(),
+                        operation: ">".to_string(),
+                        right: ExprKind::Literal {
+                            value: "1".to_string()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::Bool { value: _ }
         ));
@@ -235,15 +264,20 @@ mod tests {
         let mut checker = TypeChecker::new();
 
         assert!(&checker
-            .typecheck(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                operation: "<".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "false".to_string()
-                })
-            })
+            .typecheck(
+                ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    operation: "<".to_string(),
+                    right: ExprKind::Literal {
+                        value: "false".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -252,15 +286,20 @@ mod tests {
         let mut checker = TypeChecker::new();
 
         assert!(&checker
-            .typecheck(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
-                    value: "10".to_string()
-                }),
-                operation: "==".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "false".to_string()
-                })
-            })
+            .typecheck(
+                ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "10".to_string()
+                    }
+                    .into(),
+                    operation: "==".to_string(),
+                    right: ExprKind::Literal {
+                        value: "false".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -269,41 +308,56 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
-                .typecheck(Expression::BinaryOperation {
-                    left: Box::new(Expression::Literal {
-                        value: "3".to_string()
-                    }),
-                    operation: "+".to_string(),
-                    right: Box::new(Expression::Literal {
-                        value: "1".to_string()
-                    })
-                })
+                .typecheck(
+                    ExprKind::BinaryOperation {
+                        left: ExprKind::Literal {
+                            value: "3".to_string()
+                        }
+                        .into(),
+                        operation: "+".to_string(),
+                        right: ExprKind::Literal {
+                            value: "1".to_string()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::Int { value: _ }
         ));
 
         assert!(&checker
-            .typecheck(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                operation: "-".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "false".to_string()
-                })
-            })
+            .typecheck(
+                ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    operation: "-".to_string(),
+                    right: ExprKind::Literal {
+                        value: "false".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
             .is_err());
 
         assert!(&checker
-            .typecheck(Expression::BinaryOperation {
-                left: Box::new(Expression::Literal {
-                    value: "10".to_string()
-                }),
-                operation: "*".to_string(),
-                right: Box::new(Expression::Literal {
-                    value: "false".to_string()
-                })
-            })
+            .typecheck(
+                ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "10".to_string()
+                    }
+                    .into(),
+                    operation: "*".to_string(),
+                    right: ExprKind::Literal {
+                        value: "false".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -312,17 +366,25 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
-                .typecheck(Expression::IfClause {
-                    condition: Box::new(Expression::Literal {
-                        value: "true".to_string()
-                    }),
-                    if_block: Box::new(Expression::Literal {
-                        value: "3".to_string()
-                    }),
-                    else_block: Some(Box::new(Expression::Literal {
-                        value: "1".to_string()
-                    }))
-                })
+                .typecheck(
+                    ExprKind::IfClause {
+                        condition: ExprKind::Literal {
+                            value: "true".to_string()
+                        }
+                        .into(),
+                        if_block: ExprKind::Literal {
+                            value: "3".to_string()
+                        }
+                        .into(),
+                        else_block: Some(
+                            ExprKind::Literal {
+                                value: "1".to_string()
+                            }
+                            .into()
+                        )
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::Int { value: _ }
         ));
@@ -332,17 +394,25 @@ mod tests {
     fn test_if_with_int_condition() {
         let mut checker = TypeChecker::new();
         assert!(&checker
-            .typecheck(Expression::IfClause {
-                condition: Box::new(Expression::Literal {
-                    value: "1".to_string()
-                }),
-                if_block: Box::new(Expression::Literal {
-                    value: "3".to_string()
-                }),
-                else_block: Some(Box::new(Expression::Literal {
-                    value: "1".to_string()
-                }))
-            })
+            .typecheck(
+                ExprKind::IfClause {
+                    condition: ExprKind::Literal {
+                        value: "1".to_string()
+                    }
+                    .into(),
+                    if_block: ExprKind::Literal {
+                        value: "3".to_string()
+                    }
+                    .into(),
+                    else_block: Some(
+                        ExprKind::Literal {
+                            value: "1".to_string()
+                        }
+                        .into()
+                    )
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -350,17 +420,25 @@ mod tests {
     fn test_if_and_else_different_types() {
         let mut checker = TypeChecker::new();
         assert!(&checker
-            .typecheck(Expression::IfClause {
-                condition: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                if_block: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                else_block: Some(Box::new(Expression::Literal {
-                    value: "1".to_string()
-                }))
-            })
+            .typecheck(
+                ExprKind::IfClause {
+                    condition: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    if_block: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    else_block: Some(
+                        ExprKind::Literal {
+                            value: "1".to_string()
+                        }
+                        .into()
+                    )
+                }
+                .into()
+            )
             .is_err());
     }
 
@@ -369,21 +447,28 @@ mod tests {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
-                .typecheck(Expression::IfClause {
-                    condition: Box::new(Expression::Literal {
-                        value: "true".to_string()
-                    }),
-                    if_block: Box::new(Expression::BinaryOperation {
-                        left: Box::new(Expression::VarDeclaration {
-                            identifier: "a".to_string()
-                        }),
-                        operation: "=".to_string(),
-                        right: Box::new(Expression::Literal {
+                .typecheck(
+                    ExprKind::IfClause {
+                        condition: ExprKind::Literal {
                             value: "true".to_string()
-                        })
-                    }),
-                    else_block: None,
-                })
+                        }
+                        .into(),
+                        if_block: ExprKind::BinaryOperation {
+                            left: ExprKind::VarDeclaration {
+                                identifier: "a".to_string()
+                            }
+                            .into(),
+                            operation: "=".to_string(),
+                            right: ExprKind::Literal {
+                                value: "true".to_string()
+                            }
+                            .into()
+                        }
+                        .into(),
+                        else_block: None,
+                    }
+                    .into()
+                )
                 .unwrap(),
             Value::None
         ));
@@ -393,15 +478,20 @@ mod tests {
     fn test_if_with_return_without_else() {
         let mut checker = TypeChecker::new();
         assert!(&checker
-            .typecheck(Expression::IfClause {
-                condition: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                if_block: Box::new(Expression::Literal {
-                    value: "true".to_string()
-                }),
-                else_block: None,
-            })
+            .typecheck(
+                ExprKind::IfClause {
+                    condition: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    if_block: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    else_block: None,
+                }
+                .into()
+            )
             .is_err());
     }
 }

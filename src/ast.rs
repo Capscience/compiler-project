@@ -1,5 +1,34 @@
 #[derive(Debug, PartialEq)]
-pub enum Expression {
+pub struct Expr {
+    pub content: ExprKind,
+    pub type_: Type,
+}
+
+impl Expr {
+    pub fn new(content: ExprKind, type_: Option<Type>) -> Self {
+        if let Some(expr_type) = type_ {
+            Self {
+                content,
+                type_: expr_type,
+            }
+        } else {
+            Self {
+                content,
+                type_: Type::None,
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Type {
+    Int,
+    Bool,
+    None,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ExprKind {
     Literal {
         value: String,
     },
@@ -7,40 +36,52 @@ pub enum Expression {
         value: String,
     },
     BinaryOperation {
-        left: Box<Expression>,
+        left: Box<Expr>,
         operation: String,
-        right: Box<Expression>,
+        right: Box<Expr>,
     },
     IfClause {
-        condition: Box<Expression>,
-        if_block: Box<Expression>,
-        else_block: Option<Box<Expression>>,
+        condition: Box<Expr>,
+        if_block: Box<Expr>,
+        else_block: Option<Box<Expr>>,
     },
     Block {
-        expressions: Vec<Expression>,
+        expressions: Vec<Expr>,
     },
     VarDeclaration {
         identifier: String,
     },
 }
 
-impl Expression {
-    pub fn push(&mut self, expression: Expression) {
-        if let Expression::Block { expressions } = self {
+impl std::convert::From<ExprKind> for Box<Expr> {
+    fn from(value: ExprKind) -> Self {
+        Box::new(Expr::new(value, None))
+    }
+}
+
+impl std::convert::From<ExprKind> for Expr {
+    fn from(value: ExprKind) -> Self {
+        Expr::new(value, None)
+    }
+}
+
+impl ExprKind {
+    pub fn push(&mut self, expression: Expr) {
+        if let ExprKind::Block { expressions } = self {
             expressions.push(expression)
         }
     }
 
-    pub fn get_first(&self) -> Option<&Expression> {
+    pub fn get_first(&self) -> Option<&Expr> {
         match self {
-            Expression::Block { expressions } => expressions.first(),
+            ExprKind::Block { expressions } => expressions.first(),
             _ => None,
         }
     }
 
-    pub fn expressions(&self) -> Option<&Vec<Expression>> {
+    pub fn expressions(&self) -> Option<&Vec<Expr>> {
         match self {
-            Expression::Block { expressions } => Some(expressions),
+            ExprKind::Block { expressions } => Some(expressions),
             _ => None,
         }
     }
