@@ -1,10 +1,10 @@
-use crate::ast::{Expr, ExprKind};
-use crate::variable::{SymbolTable, Value};
+use crate::ast::{Expr, ExprKind, Type};
+use crate::variable::SymbolTable;
 use std::error::Error;
 use std::mem::discriminant;
 
 pub struct TypeChecker {
-    symbol_table: SymbolTable<Value>,
+    symbol_table: SymbolTable<Type>,
 }
 
 impl Default for TypeChecker {
@@ -20,13 +20,13 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck(&mut self, node: Expr) -> Result<Value, Box<dyn Error>> {
+    pub fn typecheck(&mut self, node: Expr) -> Result<Type, Box<dyn Error>> {
         let value = match node.content {
             ExprKind::Literal { value } => {
-                if let Ok(val) = value.parse::<bool>() {
-                    Value::Bool { value: val }
-                } else if let Ok(val) = value.parse::<i64>() {
-                    Value::Int { value: val }
+                if value.parse::<bool>().is_ok() {
+                    Type::Bool
+                } else if value.parse::<i64>().is_ok() {
+                    Type::Int
                 } else {
                     return Err(format!("Invalid literal '{value}'").into());
                 }
@@ -34,7 +34,7 @@ impl TypeChecker {
             ExprKind::Identifier { value } => {
                 let identifier_value = self.symbol_table.get(&value);
                 if let Some(val) = identifier_value {
-                    *val
+                    val.clone()
                 } else {
                     return Err(format!("Use of undeclared variable '{}'", value).into());
                 }
@@ -44,7 +44,7 @@ impl TypeChecker {
                 if_block,
                 else_block,
             } => {
-                if !matches!(&self.typecheck(*condition)?, Value::Bool { value: _ }) {
+                if !matches!(&self.typecheck(*condition)?, Type::Bool) {
                     return Err("If statement condition must be type `Bool`".into());
                 }
                 let if_type = self.typecheck(*if_block)?;
@@ -54,10 +54,10 @@ impl TypeChecker {
                     }
                     if_type
                 } else {
-                    if if_type != Value::None {
+                    if if_type != Type::None {
                         return Err("If-block cannot return a value without an Else-block".into());
                     }
-                    Value::None
+                    Type::None
                 }
             }
             ExprKind::BinaryOperation {
@@ -80,28 +80,24 @@ impl TypeChecker {
                         }
                         // Fails, if types are missmatched
                         self.symbol_table.set(variable_name.clone(), right)?;
-                        Value::None
+                        Type::None
                     }
                     "<" | ">" | "==" | ">=" | "<=" | "!=" => {
-                        if !(matches!(&left, Value::Int { value: _ })
-                            && matches!(&right, Value::Int { value: _ }))
-                        {
+                        if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
                             return Err(
                                 "Both operands must be type `Int` when using comparison".into()
                             );
                         }
-                        Value::Bool { value: false }
+                        Type::Bool
                     }
                     "+" | "-" | "*" | "/" | "%" => {
-                        if !(matches!(&left, Value::Int { value: _ })
-                            && matches!(&right, Value::Int { value: _ }))
-                        {
+                        if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
                             return Err(format!(
                                 "Both operands must be type `Int` when using operator {operation}"
                             )
                             .into());
                         }
-                        Value::Int { value: 0 }
+                        Type::Int
                     }
                     _ => {
                         if discriminant(&left) != discriminant(&right) {
@@ -114,7 +110,7 @@ impl TypeChecker {
             ExprKind::Block { expressions } => {
                 self.symbol_table =
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
-                let mut val = Value::None;
+                let mut val = Type::None;
                 for expression in expressions {
                     val = self.typecheck(expression)?;
                 }
@@ -127,7 +123,7 @@ impl TypeChecker {
             }
             ExprKind::VarDeclaration { identifier } => {
                 self.symbol_table.declare(identifier)?;
-                Value::None
+                Type::None
             }
         };
 
@@ -151,7 +147,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::Int { value: _ }
+            Type::Int
         ));
         assert!(matches!(
             checker
@@ -162,7 +158,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::Bool { value: _ }
+            Type::Bool
         ));
         assert!(checker
             .typecheck(
@@ -194,7 +190,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::None
+            Type::None
         ));
 
         assert!(matches!(
@@ -214,7 +210,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::None
+            Type::None
         ));
 
         assert!(&checker
@@ -255,7 +251,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::Bool { value: _ }
+            Type::Bool
         ));
     }
 
@@ -323,7 +319,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::Int { value: _ }
+            Type::Int
         ));
 
         assert!(&checker
@@ -386,7 +382,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::Int { value: _ }
+            Type::Int
         ));
     }
 
@@ -470,7 +466,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Value::None
+            Type::None
         ));
     }
 
