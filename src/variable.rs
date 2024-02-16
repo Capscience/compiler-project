@@ -2,18 +2,21 @@ use std::fmt::{self, Display};
 use std::{collections::HashMap, mem::discriminant};
 
 #[derive(Default)]
-pub struct SymbolTable {
-    symbols: HashMap<String, Value>,
-    pub parent: Option<Box<SymbolTable>>,
+pub struct SymbolTable<T> {
+    symbols: HashMap<String, T>,
+    pub parent: Option<Box<SymbolTable<T>>>,
 }
 
-impl SymbolTable {
-    pub fn new(parent: Option<Box<SymbolTable>>) -> SymbolTable {
+impl<T> SymbolTable<T>
+where
+    T: Default + PartialEq,
+{
+    pub fn new(parent: Option<Box<SymbolTable<T>>>) -> SymbolTable<T> {
         let symbols = HashMap::new();
         Self { symbols, parent }
     }
 
-    pub fn get(&self, symbol: &String) -> Option<&Value> {
+    pub fn get(&self, symbol: &String) -> Option<&T> {
         if let Some(value) = self.symbols.get(symbol) {
             Some(value)
         } else if let Some(parent) = &self.parent {
@@ -23,9 +26,9 @@ impl SymbolTable {
         }
     }
 
-    pub fn set(&mut self, symbol: String, new_value: Value) -> Result<(), &str> {
+    pub fn set(&mut self, symbol: String, new_value: T) -> Result<(), &str> {
         if let Some(value) = self.symbols.get(&symbol) {
-            if value != &Value::None && discriminant(value) != discriminant(&new_value) {
+            if value != &T::default() && discriminant(value) != discriminant(&new_value) {
                 return Err("Incompatible types!");
             }
             self.symbols.insert(symbol, new_value);
@@ -41,7 +44,7 @@ impl SymbolTable {
         if self.get(&symbol).is_some() {
             Err("Variable already exists!")
         } else {
-            self.symbols.insert(symbol, Value::None);
+            self.symbols.insert(symbol, T::default());
             Ok(())
         }
     }
@@ -61,5 +64,11 @@ impl Display for Value {
             Value::Bool { value } => write!(f, "{}", value),
             Value::None => write!(f, "None"),
         }
+    }
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Self::None
     }
 }

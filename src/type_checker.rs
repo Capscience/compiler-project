@@ -4,7 +4,7 @@ use std::error::Error;
 use std::mem::discriminant;
 
 pub struct TypeChecker {
-    symbol_table: SymbolTable,
+    symbol_table: SymbolTable<Value>,
 }
 
 impl Default for TypeChecker {

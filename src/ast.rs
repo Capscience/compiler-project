@@ -27,6 +27,12 @@ pub enum Type {
     None,
 }
 
+impl Default for Type {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ExprKind {
     Literal {

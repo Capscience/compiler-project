@@ -3,7 +3,7 @@ use crate::variable::{SymbolTable, Value};
 use std::error::Error;
 
 pub struct Interpreter {
-    symbol_table: SymbolTable,
+    symbol_table: SymbolTable<Value>,
 }
 
 impl Default for Interpreter {
