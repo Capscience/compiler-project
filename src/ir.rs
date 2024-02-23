@@ -1,5 +1,5 @@
-type IRVar = String;
-type Label = String;
+pub type IRVar = String;
+pub type Label = String;
 
 pub enum Instruction {
     LoadBoolConst {
