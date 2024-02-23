@@ -20,8 +20,8 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck(&mut self, node: Expr) -> Result<Type, Box<dyn Error>> {
-        let value = match node.content {
+    pub fn typecheck(&mut self, mut node: Expr) -> Result<Type, Box<dyn Error>> {
+        let type_ = match node.content {
             ExprKind::Literal { value } => {
                 if value.parse::<bool>().is_ok() {
                     Type::Bool
@@ -67,8 +67,8 @@ impl TypeChecker {
             } => {
                 let left_expr = *left;
                 let variable_name = match left_expr.content {
-                    ExprKind::Identifier { ref value } => value.to_string(),
-                    ExprKind::VarDeclaration { ref identifier } => identifier.to_string(),
+                    ExprKind::Identifier { ref value } => value.into(),
+                    ExprKind::VarDeclaration { ref identifier } => identifier.into(),
                     _ => String::new(),
                 };
                 let left = self.typecheck(left_expr)?;
@@ -127,7 +127,8 @@ impl TypeChecker {
             }
         };
 
-        Ok(value)
+        node.type_ = type_.clone();
+        Ok(type_)
     }
 }
 
@@ -136,16 +137,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_typecheck_literals() {
+    fn test_typed_ast_literal() {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             checker
                 .typecheck(
                     ExprKind::Literal {
-                        value: "1".to_string()
+                        value: "true".into()
                     }
                     .into()
                 )
+                .unwrap(),
+            Type::Bool
+        ))
+    }
+
+    #[test]
+    fn test_typed_ast_expression() {
+        let mut checker = TypeChecker::new();
+        assert!(matches!(
+            checker
+                .typecheck(
+                    ExprKind::BinaryOperation {
+                        left: ExprKind::Literal { value: "1".into() }.into(),
+                        operation: "+".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
+                    }
+                    .into()
+                )
+                .unwrap(),
+            Type::Int
+        ))
+    }
+
+    #[test]
+    fn test_typecheck_literals() {
+        let mut checker = TypeChecker::new();
+        assert!(matches!(
+            checker
+                .typecheck(ExprKind::Literal { value: "1".into() }.into())
                 .unwrap(),
             Type::Int
         ));
@@ -153,7 +183,7 @@ mod tests {
             checker
                 .typecheck(
                     ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into()
                 )
@@ -163,7 +193,7 @@ mod tests {
         assert!(checker
             .typecheck(
                 ExprKind::Literal {
-                    value: "should_fail".to_string()
+                    value: "should_fail".into()
                 }
                 .into()
             )
@@ -178,14 +208,11 @@ mod tests {
                 .typecheck(
                     ExprKind::BinaryOperation {
                         left: ExprKind::VarDeclaration {
-                            identifier: "a".to_string()
+                            identifier: "a".into()
                         }
                         .into(),
-                        operation: "=".to_string(),
-                        right: ExprKind::Literal {
-                            value: "1".to_string()
-                        }
-                        .into()
+                        operation: "=".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
                     }
                     .into()
                 )
@@ -197,15 +224,9 @@ mod tests {
             &checker
                 .typecheck(
                     ExprKind::BinaryOperation {
-                        left: ExprKind::Identifier {
-                            value: "a".to_string()
-                        }
-                        .into(),
-                        operation: "=".to_string(),
-                        right: ExprKind::Literal {
-                            value: "3".to_string()
-                        }
-                        .into()
+                        left: ExprKind::Identifier { value: "a".into() }.into(),
+                        operation: "=".into(),
+                        right: ExprKind::Literal { value: "3".into() }.into()
                     }
                     .into()
                 )
@@ -216,13 +237,10 @@ mod tests {
         assert!(&checker
             .typecheck(
                 ExprKind::BinaryOperation {
-                    left: ExprKind::Identifier {
-                        value: "a".to_string()
-                    }
-                    .into(),
-                    operation: "=".to_string(),
+                    left: ExprKind::Identifier { value: "a".into() }.into(),
+                    operation: "=".into(),
                     right: ExprKind::Literal {
-                        value: "false".to_string()
+                        value: "false".into()
                     }
                     .into()
                 }
@@ -238,15 +256,9 @@ mod tests {
             &checker
                 .typecheck(
                     ExprKind::BinaryOperation {
-                        left: ExprKind::Literal {
-                            value: "3".to_string()
-                        }
-                        .into(),
-                        operation: ">".to_string(),
-                        right: ExprKind::Literal {
-                            value: "1".to_string()
-                        }
-                        .into()
+                        left: ExprKind::Literal { value: "3".into() }.into(),
+                        operation: ">".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
                     }
                     .into()
                 )
@@ -263,12 +275,12 @@ mod tests {
             .typecheck(
                 ExprKind::BinaryOperation {
                     left: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
-                    operation: "<".to_string(),
+                    operation: "<".into(),
                     right: ExprKind::Literal {
-                        value: "false".to_string()
+                        value: "false".into()
                     }
                     .into()
                 }
@@ -284,13 +296,10 @@ mod tests {
         assert!(&checker
             .typecheck(
                 ExprKind::BinaryOperation {
-                    left: ExprKind::Literal {
-                        value: "10".to_string()
-                    }
-                    .into(),
-                    operation: "==".to_string(),
+                    left: ExprKind::Literal { value: "10".into() }.into(),
+                    operation: "==".into(),
                     right: ExprKind::Literal {
-                        value: "false".to_string()
+                        value: "false".into()
                     }
                     .into()
                 }
@@ -306,15 +315,9 @@ mod tests {
             &checker
                 .typecheck(
                     ExprKind::BinaryOperation {
-                        left: ExprKind::Literal {
-                            value: "3".to_string()
-                        }
-                        .into(),
-                        operation: "+".to_string(),
-                        right: ExprKind::Literal {
-                            value: "1".to_string()
-                        }
-                        .into()
+                        left: ExprKind::Literal { value: "3".into() }.into(),
+                        operation: "+".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
                     }
                     .into()
                 )
@@ -326,12 +329,12 @@ mod tests {
             .typecheck(
                 ExprKind::BinaryOperation {
                     left: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
-                    operation: "-".to_string(),
+                    operation: "-".into(),
                     right: ExprKind::Literal {
-                        value: "false".to_string()
+                        value: "false".into()
                     }
                     .into()
                 }
@@ -342,13 +345,10 @@ mod tests {
         assert!(&checker
             .typecheck(
                 ExprKind::BinaryOperation {
-                    left: ExprKind::Literal {
-                        value: "10".to_string()
-                    }
-                    .into(),
-                    operation: "*".to_string(),
+                    left: ExprKind::Literal { value: "10".into() }.into(),
+                    operation: "*".into(),
                     right: ExprKind::Literal {
-                        value: "false".to_string()
+                        value: "false".into()
                     }
                     .into()
                 }
@@ -365,19 +365,11 @@ mod tests {
                 .typecheck(
                     ExprKind::IfClause {
                         condition: ExprKind::Literal {
-                            value: "true".to_string()
+                            value: "true".into()
                         }
                         .into(),
-                        if_block: ExprKind::Literal {
-                            value: "3".to_string()
-                        }
-                        .into(),
-                        else_block: Some(
-                            ExprKind::Literal {
-                                value: "1".to_string()
-                            }
-                            .into()
-                        )
+                        if_block: ExprKind::Literal { value: "3".into() }.into(),
+                        else_block: Some(ExprKind::Literal { value: "1".into() }.into())
                     }
                     .into()
                 )
@@ -392,20 +384,9 @@ mod tests {
         assert!(&checker
             .typecheck(
                 ExprKind::IfClause {
-                    condition: ExprKind::Literal {
-                        value: "1".to_string()
-                    }
-                    .into(),
-                    if_block: ExprKind::Literal {
-                        value: "3".to_string()
-                    }
-                    .into(),
-                    else_block: Some(
-                        ExprKind::Literal {
-                            value: "1".to_string()
-                        }
-                        .into()
-                    )
+                    condition: ExprKind::Literal { value: "1".into() }.into(),
+                    if_block: ExprKind::Literal { value: "3".into() }.into(),
+                    else_block: Some(ExprKind::Literal { value: "1".into() }.into())
                 }
                 .into()
             )
@@ -419,19 +400,14 @@ mod tests {
             .typecheck(
                 ExprKind::IfClause {
                     condition: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
                     if_block: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
-                    else_block: Some(
-                        ExprKind::Literal {
-                            value: "1".to_string()
-                        }
-                        .into()
-                    )
+                    else_block: Some(ExprKind::Literal { value: "1".into() }.into())
                 }
                 .into()
             )
@@ -446,17 +422,17 @@ mod tests {
                 .typecheck(
                     ExprKind::IfClause {
                         condition: ExprKind::Literal {
-                            value: "true".to_string()
+                            value: "true".into()
                         }
                         .into(),
                         if_block: ExprKind::BinaryOperation {
                             left: ExprKind::VarDeclaration {
-                                identifier: "a".to_string()
+                                identifier: "a".into()
                             }
                             .into(),
-                            operation: "=".to_string(),
+                            operation: "=".into(),
                             right: ExprKind::Literal {
-                                value: "true".to_string()
+                                value: "true".into()
                             }
                             .into()
                         }
@@ -477,11 +453,11 @@ mod tests {
             .typecheck(
                 ExprKind::IfClause {
                     condition: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
                     if_block: ExprKind::Literal {
-                        value: "true".to_string()
+                        value: "true".into()
                     }
                     .into(),
                     else_block: None,
