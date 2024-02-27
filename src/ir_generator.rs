@@ -66,7 +66,7 @@ impl IRGenerator {
     }
 }
 
-pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) {
+pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) -> Vec<Instruction> {
     let mut generator = IRGenerator::new(root_types.clone());
 
     let mut root_symtab: SymbolTable<String> = SymbolTable::new(None);
@@ -76,5 +76,39 @@ pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) {
     }
     for expr in exprs {
         generator.visit(&mut root_symtab, expr);
+    }
+    generator.instructions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ir_literals() {
+        let instructions = generate_ir(
+            HashMap::new(),
+            vec![
+                Expr {
+                    type_: Type::Int,
+                    content: ExprKind::Literal { value: "1".into() },
+                },
+                Expr {
+                    type_: Type::Bool,
+                    content: ExprKind::Literal {
+                        value: "true".into(),
+                    },
+                },
+            ],
+        );
+
+        assert_eq!(
+            instructions[0].to_string(),
+            "LoadIntConst(1, x1)".to_string()
+        );
+        assert_eq!(
+            instructions[1].to_string(),
+            "LoadBoolConst(true, x2)".to_string()
+        );
     }
 }
