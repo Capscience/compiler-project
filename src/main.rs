@@ -60,17 +60,22 @@ fn interpreter_cli() {
 fn ir_gen(filename: PathBuf) {
     let code = fs::read_to_string(filename).expect("File not found!");
     let mut typechecker = TypeChecker::new();
-    let mut ast = parse(&tokenize(&code)).unwrap();
+    let ast_result = parse(&tokenize(&code));
+    if let Err(error) = ast_result {
+        println!("Parsing error: {error}");
+        std::process::exit(1);
+    }
+    let mut ast = ast_result.expect("Handled above.");
     for mut node in &mut ast {
         if let Err(error) = typechecker.typecheck(&mut node) {
             println!("Typecheck error: {error}");
+            std::process::exit(1);
         }
     }
     let ir = generate_ir(HashMap::new(), ast);
     for line in ir {
         println!("{}", line.to_string());
     }
-    println!("EOF");
 }
 
 fn usage() {
