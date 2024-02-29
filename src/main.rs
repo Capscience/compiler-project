@@ -1,12 +1,22 @@
-use std::{env, io::Write};
+use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
 
-use compiler_project::{interpreter::Interpreter, parser::parse, tokenizer::tokenize};
+use compiler_project::{
+    interpreter::Interpreter, ir_generator::generate_ir, parser::parse, tokenizer::tokenize,
+    type_checker::TypeChecker,
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     match args.len() {
         2 => match args[1].as_str() {
             "interpret" => interpreter_cli(),
+            _ => {
+                usage();
+                std::process::exit(1);
+            }
+        },
+        3 => match args[1].as_str() {
+            "ir" => ir_gen(args[2].clone().into()),
             _ => {
                 usage();
                 std::process::exit(1);
@@ -47,9 +57,26 @@ fn interpreter_cli() {
     }
 }
 
+fn ir_gen(filename: PathBuf) {
+    let code = fs::read_to_string(filename).expect("File not found!");
+    let mut typechecker = TypeChecker::new();
+    let mut ast = parse(&tokenize(&code)).unwrap();
+    for mut node in &mut ast {
+        if let Err(error) = typechecker.typecheck(&mut node) {
+            println!("Typecheck error: {error}");
+        }
+    }
+    let ir = generate_ir(HashMap::new(), ast);
+    for line in ir {
+        println!("{}", line.to_string());
+    }
+    println!("EOF");
+}
+
 fn usage() {
     println!("Usage:");
     println!("\tcargo run -- <command> [args]\n");
     println!("Commands:");
     println!("\tinterpret");
+    println!("\tir <filename>");
 }
