@@ -30,6 +30,7 @@ pub enum Instruction {
     Label {
         name: Label,
     },
+    Return,
 }
 
 impl ToString for Instruction {
@@ -55,7 +56,8 @@ impl ToString for Instruction {
                 then_label,
                 else_label,
             } => format!("CondJump({cond}, {then_label}, {else_label})"),
-            Self::Label { name } => name.into(),
+            Self::Label { name } => format!("Label({})", name),
+            Self::Return => "Return()".into(),
         }
     }
 }
