@@ -165,9 +165,33 @@ pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) -> Vec<I
         root_symtab.declare(key.to_string()).unwrap();
         root_symtab.set(key.to_string(), key.to_string()).unwrap();
     }
+    generator.emit(Instruction::Label {
+        name: "Start".into(),
+    });
+    let mut final_result = String::new();
     for expr in exprs {
-        generator.visit(&mut root_symtab, expr);
+        final_result = generator.visit(&mut root_symtab, expr);
     }
+    let final_type = generator
+        .var_types
+        .get(&final_result)
+        .expect("The final return variable does not exist!")
+        .clone();
+    let return_var = generator.new_var(Type::None);
+    match final_type {
+        Type::Int => generator.emit(Instruction::Call {
+            fun: "print_int".into(),
+            args: vec![final_result],
+            dest: return_var,
+        }),
+        Type::Bool => generator.emit(Instruction::Call {
+            fun: "print_bool".into(),
+            args: vec![final_result],
+            dest: return_var,
+        }),
+        Type::None => {}
+    }
+    generator.emit(Instruction::Return);
     generator.instructions
 }
 
