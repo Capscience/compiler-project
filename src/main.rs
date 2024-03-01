@@ -1,8 +1,8 @@
 use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
 
 use compiler_project::{
-    assembly_generator::generate_assembly, interpreter::Interpreter, ir_generator::generate_ir,
-    parser::parse, tokenizer::tokenize, type_checker::TypeChecker,
+    assembly_generator::generate_assembly, interpreter::Interpreter, ir::Instruction,
+    ir_generator::generate_ir, parser::parse, tokenizer::tokenize, type_checker::TypeChecker,
 };
 
 fn main() {
@@ -75,7 +75,10 @@ fn ir_gen(filename: PathBuf) {
     }
     let ir = generate_ir(HashMap::new(), ast);
     for line in ir {
-        println!("{}", line.to_string());
+        match &line {
+            Instruction::Label { .. } => println!("\n{}", line.to_string()),
+            _ => println!("{}", line.to_string()),
+        }
     }
 }
 
