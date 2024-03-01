@@ -116,20 +116,29 @@ impl IRGenerator {
 
                     let var_cond = self.visit(symbol_table, *condition);
 
+                    var = self.new_var(expr.type_.clone());
                     self.emit(Instruction::CondJump {
                         cond: var_cond,
                         then_label: l_then.clone(),
                         else_label: l_else.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    self.visit(symbol_table, *if_block);
+                    let then_return_var = self.visit(symbol_table, *if_block);
+                    self.emit(Instruction::Copy {
+                        source: then_return_var,
+                        dest: var.clone(),
+                    });
                     self.emit(Instruction::Jump {
                         label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_else });
-                    self.visit(symbol_table, *else_block);
+                    let else_return_var = self.visit(symbol_table, *else_block);
+                    self.emit(Instruction::Copy {
+                        source: else_return_var,
+                        dest: var.clone(),
+                    });
+
                     self.emit(Instruction::Label { name: l_end });
-                    var = self.new_var(expr.type_.clone());
                 } else {
                     let l_then = self.new_label();
                     let l_end = self.new_label();
