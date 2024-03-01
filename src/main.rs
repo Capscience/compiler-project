@@ -1,8 +1,8 @@
 use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
 
 use compiler_project::{
-    interpreter::Interpreter, ir_generator::generate_ir, parser::parse, tokenizer::tokenize,
-    type_checker::TypeChecker,
+    assembly_generator::generate_assembly, interpreter::Interpreter, ir_generator::generate_ir,
+    parser::parse, tokenizer::tokenize, type_checker::TypeChecker,
 };
 
 fn main() {
@@ -17,6 +17,7 @@ fn main() {
         },
         3 => match args[1].as_str() {
             "ir" => ir_gen(args[2].clone().into()),
+            "asm" => asm_gen(args[2].clone().into()),
             _ => {
                 usage();
                 std::process::exit(1);
@@ -74,6 +75,28 @@ fn ir_gen(filename: PathBuf) {
     }
     let ir = generate_ir(HashMap::new(), ast);
     for line in ir {
+        println!("{}", line.to_string());
+    }
+}
+
+fn asm_gen(filename: PathBuf) {
+    let code = fs::read_to_string(filename).expect("File not found!");
+    let mut typechecker = TypeChecker::new();
+    let ast_result = parse(&tokenize(&code));
+    if let Err(error) = ast_result {
+        println!("Parsing error: {error}");
+        std::process::exit(1);
+    }
+    let mut ast = ast_result.expect("Handled above.");
+    for mut node in &mut ast {
+        if let Err(error) = typechecker.typecheck(&mut node) {
+            println!("Typecheck error: {error}");
+            std::process::exit(1);
+        }
+    }
+    let instructions = generate_ir(HashMap::new(), ast);
+    let assembly = generate_assembly(&instructions);
+    for line in assembly.lines() {
         println!("{}", line.to_string());
     }
 }
