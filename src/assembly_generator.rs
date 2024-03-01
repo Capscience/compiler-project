@@ -52,7 +52,7 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
     emit(format!("    subq ${}, %rsp", locals.stack_used()).as_str());
 
     for instruction in instructions {
-        emit(format!("# {}", instruction.to_string()).as_str());
+        emit(format!("\n# {}", instruction.to_string()).as_str());
         match instruction {
             Instruction::Return => emit("ret"),
             Instruction::Label { name } => emit(format!(".{name}").as_str()),
@@ -94,6 +94,16 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
                 );
                 emit(format!("jne .{then_label}").as_str());
                 emit(format!("jmp .{else_label}").as_str());
+            }
+            Instruction::Copy { source, dest } => {
+                let src_ref = locals
+                    .get_ref(source.to_string())
+                    .expect("IR variable does not exist!");
+                let dest_ref = locals
+                    .get_ref(dest.to_string())
+                    .expect("IR variable does not exist!");
+                emit(format!("movq {src_ref}, %rax").as_str());
+                emit(format!("movq %rax, {dest_ref}").as_str());
             }
             _ => {}
         }
