@@ -51,6 +51,54 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
     emit(ASM_TEMPLATE);
     emit(format!("    subq ${}, %rsp", locals.stack_used()).as_str());
 
+    for instruction in instructions {
+        emit(format!("# {}", instruction.to_string()).as_str());
+        match instruction {
+            Instruction::Return => emit("ret"),
+            Instruction::Label { name } => emit(format!(".{name}").as_str()),
+            Instruction::Jump { label } => emit(format!("jmp .{label}").as_str()),
+            Instruction::LoadIntConst { value, dest } => emit(
+                format!(
+                    "movq ${value}, {}",
+                    locals
+                        .get_ref(dest.to_string())
+                        .expect("IR variable does not exist!")
+                )
+                .as_str(),
+            ),
+            Instruction::LoadBoolConst { value, dest } => {
+                let value = if *value { 1 } else { 0 };
+                emit(
+                    format!(
+                        "movq ${value}, {}",
+                        locals
+                            .get_ref(dest.to_string())
+                            .expect("IR variable does not exist!")
+                    )
+                    .as_str(),
+                )
+            }
+            Instruction::CondJump {
+                cond,
+                then_label,
+                else_label,
+            } => {
+                emit(
+                    format!(
+                        "cmpq $0, {}",
+                        locals
+                            .get_ref(cond.to_string())
+                            .expect("IR variable does not exist!")
+                    )
+                    .as_str(),
+                );
+                emit(format!("jne .{then_label}").as_str());
+                emit(format!("jmp .{else_label}").as_str());
+            }
+            _ => {}
+        }
+    }
+
     lines.join("\n")
 }
 
