@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ir::Instruction;
 
-const ASM_TEMPLATE: &str = "
+const ASM_START: &str = "
     .extern printf
     .global main
     .type main, @function
@@ -12,6 +12,8 @@ const ASM_TEMPLATE: &str = "
 main:
     pushq %rbp
     movq %rsp, %rbp";
+
+const PARAM_REGISTERS: [&str; 6] = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
 
 struct Locals {
     var_to_location: HashMap<String, String>,
@@ -48,14 +50,19 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
     };
 
     let locals = Locals::new(get_all_variables(instructions));
-    emit(ASM_TEMPLATE);
+    emit(ASM_START);
     emit(format!("    subq ${}, %rsp", locals.stack_used()).as_str());
 
     for instruction in instructions {
         emit(format!("\n# {}", instruction.to_string()).as_str());
         match instruction {
-            Instruction::Return => emit("ret"),
-            Instruction::Label { name } => emit(format!(".{name}").as_str()),
+            Instruction::Return => {
+                emit("movq $0, %rax");
+                emit("movq %rbp, %rsp");
+                emit("popq %rbp");
+                emit("ret");
+            }
+            Instruction::Label { name } => emit(format!(".{name}:").as_str()),
             Instruction::Jump { label } => emit(format!("jmp .{label}").as_str()),
             Instruction::LoadIntConst { value, dest } => emit(
                 format!(
@@ -105,7 +112,19 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
                 emit(format!("movq {src_ref}, %rax").as_str());
                 emit(format!("movq %rax, {dest_ref}").as_str());
             }
-            _ => {}
+            Instruction::Call { fun, args, dest } => {
+                for (i, arg) in args.iter().enumerate() {
+                    let arg_ref = locals
+                        .get_ref(arg.to_string())
+                        .expect("IR variable does not exist!");
+                    emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]).as_str())
+                }
+                let return_ref = locals
+                    .get_ref(dest.to_string())
+                    .expect("IR variable does not exist!");
+                emit(format!("callq {fun}").as_str());
+                emit(format!("movq %rax, {return_ref}").as_str());
+            }
         }
     }
 
@@ -117,6 +136,7 @@ fn get_all_variables(instructions: &[Instruction]) -> Vec<String> {
     for instruction in instructions {
         vars.extend(instruction.get_vars());
     }
+    vars.sort_unstable();
     vars.dedup();
     vars
 }
