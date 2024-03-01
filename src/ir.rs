@@ -1,3 +1,5 @@
+use std::vec;
+
 pub type IRVar = String;
 pub type Label = String;
 
@@ -31,6 +33,22 @@ pub enum Instruction {
         name: Label,
     },
     Return,
+}
+
+impl Instruction {
+    pub fn get_vars(&self) -> Vec<String> {
+        match self {
+            Self::Copy { source, dest } => vec![source.to_string(), dest.to_string()],
+            Self::Call { args, dest, .. } => {
+                let mut vars = vec![dest.to_string()];
+                vars.extend(args.clone());
+                vars
+            }
+            Self::LoadBoolConst { dest, .. } => vec![dest.to_string()],
+            Self::LoadIntConst { dest, .. } => vec![dest.to_string()],
+            _ => Vec::new(),
+        }
+    }
 }
 
 impl ToString for Instruction {
