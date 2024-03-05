@@ -18,6 +18,14 @@ fn main() {
         3 => match args[1].as_str() {
             "ir" => ir_gen(args[2].clone().into()),
             "asm" => asm_gen(args[2].clone().into()),
+            "compile" => cli_compile(args[2].clone().into(), "a.out".into()),
+            _ => {
+                usage();
+                std::process::exit(1);
+            }
+        },
+        4 => match args[1].as_str() {
+            "compile" => cli_compile(args[2].clone().into(), args[3].clone().into()),
             _ => {
                 usage();
                 std::process::exit(1);
@@ -56,6 +64,11 @@ fn interpreter_cli() {
             }
         };
     }
+}
+
+fn cli_compile(codefile: PathBuf, binfile: PathBuf) {
+    let code = fs::read_to_string(codefile).expect("Codefile not found!");
+    compiler_project::compile(code, &binfile);
 }
 
 fn ir_gen(filename: PathBuf) {
@@ -110,4 +123,6 @@ fn usage() {
     println!("Commands:");
     println!("\tinterpret");
     println!("\tir <filename>");
+    println!("\tasm <filename>");
+    println!("\tcompile <filename> [output_filename]");
 }
