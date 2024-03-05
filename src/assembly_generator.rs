@@ -113,21 +113,76 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
                 emit(format!("movq %rax, {dest_ref}").as_str());
             }
             Instruction::Call { fun, args, dest } => {
-                for (i, arg) in args.iter().enumerate() {
-                    let arg_ref = locals
-                        .get_ref(arg.to_string())
-                        .expect("IR variable does not exist!");
-                    emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]).as_str())
-                }
-                let return_ref = locals
-                    .get_ref(dest.to_string())
-                    .expect("IR variable does not exist!");
-                emit(format!("callq {fun}").as_str());
-                emit(format!("movq %rax, {return_ref}").as_str());
+                let arg_refs = args
+                    .iter()
+                    .map(|arg| {
+                        locals
+                            .get_ref(arg.to_string())
+                            .expect("IR variable does not exist!")
+                            .to_string()
+                    })
+                    .collect();
+                emit(&generate_call(
+                    fun.to_string(),
+                    arg_refs,
+                    locals
+                        .get_ref(dest.to_string())
+                        .expect("IR variable does not exist!")
+                        .to_string(),
+                ));
             }
         }
     }
 
+    let mut asm = lines.join("\n");
+    asm.push('\n');
+    asm
+}
+
+fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String {
+    let mut lines = Vec::new();
+    let mut emit = |line: &str| {
+        let _ = lines.push(line.to_string());
+    };
+
+    match fun.as_str() {
+        // unary operators here later
+        "+" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit(format!("addq {}, %rax", arg_refs[1]).as_str());
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
+        "-" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit(format!("subq {}, %rax", arg_refs[1]).as_str());
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
+        "*" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit(format!("imulq {}, %rax", arg_refs[1]).as_str());
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
+        "/" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit("cqto");
+            emit(format!("idivq {}", arg_refs[1]).as_str());
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
+        "%" => {}
+        "==" => {}
+        "!=" => {}
+        "<" => {}
+        ">" => {}
+        "<=" => {}
+        ">=" => {}
+        _ => {
+            for (i, arg_ref) in arg_refs.iter().enumerate() {
+                emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]).as_str())
+            }
+            emit(format!("callq {fun}").as_str());
+            emit(format!("movq %rax, {dest_ref}").as_str());
+        }
+    }
     let mut asm = lines.join("\n");
     asm.push('\n');
     asm
