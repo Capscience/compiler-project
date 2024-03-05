@@ -128,7 +128,9 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
         }
     }
 
-    lines.join("\n")
+    let mut asm = lines.join("\n");
+    asm.push('\n');
+    asm
 }
 
 fn get_all_variables(instructions: &[Instruction]) -> Vec<String> {
