@@ -16,6 +16,7 @@ fn main() {
             }
         },
         3 => match args[1].as_str() {
+            "tokens" => cli_tokenize(args[2].clone().into()),
             "ir" => ir_gen(args[2].clone().into()),
             "asm" => asm_gen(args[2].clone().into()),
             "compile" => cli_compile(args[2].clone().into(), "a.out".into()),
@@ -64,6 +65,15 @@ fn interpreter_cli() {
             }
         };
     }
+}
+
+fn cli_tokenize(codefile: PathBuf) {
+    let code = fs::read_to_string(codefile).expect("Codefile not found!");
+    let tokens = tokenize(&code);
+    for token in tokens {
+        print!("{}, ", token);
+    }
+    print!("\n");
 }
 
 fn cli_compile(codefile: PathBuf, binfile: PathBuf) {
