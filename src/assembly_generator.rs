@@ -144,6 +144,13 @@ fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String
     let mut emit = |line: &str| {
         let _ = lines.push(line.to_string());
     };
+    let mut emit_comparison = |setcc_instruction: &str| {
+        emit("xor %rax, %rax");
+        emit(format!("movq {}, %rdx", arg_refs[0]).as_str());
+        emit(format!("cmpq {}, %rdx", arg_refs[1]).as_str());
+        emit(format!("{} %al", setcc_instruction).as_str());
+        emit(format!("movq %rax, {}", dest_ref).as_str());
+    };
 
     match fun.as_str() {
         // unary operators here later
@@ -168,13 +175,18 @@ fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String
             emit(format!("idivq {}", arg_refs[1]).as_str());
             emit(format!("movq %rax, {}", dest_ref).as_str());
         }
-        "%" => {}
-        "==" => {}
-        "!=" => {}
-        "<" => {}
-        ">" => {}
-        "<=" => {}
-        ">=" => {}
+        "%" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit("cqto");
+            emit(format!("idivq {}", arg_refs[1]).as_str());
+            emit(format!("movq %rdx, {}", dest_ref).as_str());
+        }
+        "==" => emit_comparison("sete"),
+        "!=" => emit_comparison("setne"),
+        "<" => emit_comparison("setl"),
+        ">" => emit_comparison("setg"),
+        "<=" => emit_comparison("setle"),
+        ">=" => emit_comparison("setge"),
         _ => {
             for (i, arg_ref) in arg_refs.iter().enumerate() {
                 emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]).as_str())
@@ -183,9 +195,7 @@ fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String
             emit(format!("movq %rax, {dest_ref}").as_str());
         }
     }
-    let mut asm = lines.join("\n");
-    asm.push('\n');
-    asm
+    lines.join("\n")
 }
 
 fn get_all_variables(instructions: &[Instruction]) -> Vec<String> {
