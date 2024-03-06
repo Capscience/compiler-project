@@ -92,7 +92,7 @@ fn parse_assignment(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, S
 fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     let mut left: Box<Expr> = parse_polynomial(iter)?;
     while iter.peek().is_some() {
-        if !["<", ">"].contains(
+        if !["<", ">", "<=", ">=", "==", "!="].contains(
             &iter
                 .peek()
                 .expect("Checked in while condition.")
@@ -102,7 +102,8 @@ fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, S
             break;
         };
 
-        let operation = consume(iter, Some(vec!["<", ">"])).expect("Should fail if None.");
+        let operation = consume(iter, Some(vec!["<", ">", "<=", ">=", "==", "!="]))
+            .expect("Should fail if None.");
         let right = parse_polynomial(iter)?;
         left = ExprKind::BinaryOperation {
             left,
