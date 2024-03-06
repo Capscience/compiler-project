@@ -96,6 +96,18 @@ impl Interpreter {
                     ">" => Value::Bool {
                         value: a.ok_or("Invalid type!")? > b.ok_or("Invalid type!")?,
                     },
+                    ">=" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? >= b.ok_or("Invalid type!")?,
+                    },
+                    "<=" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? <= b.ok_or("Invalid type!")?,
+                    },
+                    "==" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? == b.ok_or("Invalid type!")?,
+                    },
+                    "!=" => Value::Bool {
+                        value: a.ok_or("Invalid type!")? != b.ok_or("Invalid type!")?,
+                    },
                     "=" => {
                         if variable_name.is_empty() {
                             return Err("Invalid assignment!".into());
