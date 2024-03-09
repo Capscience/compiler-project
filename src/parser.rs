@@ -13,7 +13,6 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Expr>, String> {
             "{" => {
                 consume(&mut iter, Some(vec!["{"]));
                 expressions.push(*parse_block(&mut iter)?);
-                consume(&mut iter, Some(vec!["}"]));
             }
             _ => {
                 expressions.push(*parse_assignment(&mut iter)?);
@@ -48,9 +47,9 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
             "{" => {
                 consume(iter, Some(vec!["{"]));
                 block.push(*parse_block(iter)?);
-                consume(iter, Some(vec!["}"]));
             }
             "}" => {
+                consume(iter, Some(vec!["}"]));
                 break;
             }
             _ => {
@@ -72,13 +71,13 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
 }
 
 fn parse_assignment(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left = parse_expression(iter)?;
+    let mut left = parse_binop(iter)?;
     while iter.peek().is_some() {
         if iter.peek().expect("Checked on previous line").text.as_str() != "=" {
             break;
         }
         let operation = consume(iter, Some(vec!["="])).expect("Checked on previous if statement");
-        let right = parse_expression(iter)?;
+        let right = parse_binop(iter)?;
         left = ExprKind::BinaryOperation {
             left,
             operation,
@@ -89,7 +88,7 @@ fn parse_assignment(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, S
     Ok(left)
 }
 
-fn parse_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
+fn parse_binop(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     let mut left: Box<Expr> = parse_polynomial(iter)?;
     while iter.peek().is_some() {
         if !["<", ">", "<=", ">=", "==", "!="].contains(
@@ -174,7 +173,8 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, Strin
         "(" => return parse_parenthesized(iter),
         "if" => return parse_if_expression(iter),
         "var" => return parse_var_declaration(iter),
-        _ => {}
+        "while" => return parse_while(iter),
+        _ => {} // Continue according to token type
     }
 
     match token.tokentype {
@@ -186,23 +186,23 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, Strin
 
 fn parse_parenthesized(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     consume(iter, Some(vec!["("]));
-    let expression = parse_expression(iter)?;
+    let expression = parse_binop(iter)?;
     consume(iter, Some(vec![")"]));
     Ok(expression)
 }
 
 fn parse_if_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     consume(iter, Some(vec!["if"]));
-    let condition = parse_expression(iter)?;
+    let condition = parse_binop(iter)?;
     consume(iter, Some(vec!["then"]));
-    let if_block = parse_expression(iter)?;
+    let if_block = parse_binop(iter)?;
 
     // Optional else block
     let mut else_block = None;
     if let Some(next) = iter.peek() {
         if next.text == "else" {
             consume(iter, Some(vec!["else"]));
-            else_block = Some(parse_expression(iter)?);
+            else_block = Some(parse_binop(iter)?);
         }
     }
 
@@ -222,6 +222,28 @@ fn parse_var_declaration(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Exp
     } else {
         Err(format!("Expected identifier, got {:?}", *identifier))
     }
+}
+
+fn parse_while(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
+    consume(iter, Some(vec!["while"]));
+    let condition = parse_binop(iter)?;
+    consume(iter, Some(vec!["do"]));
+    let peek = iter.peek();
+    if peek.is_none() {
+        return Err("Expected expression, found nothing.".into());
+    }
+    let do_block = match peek.unwrap().text.as_str() {
+        "{" => {
+            consume(iter, Some(vec!["{"]));
+            parse_block(iter)?
+        }
+        _ => parse_binop(iter)?,
+    };
+    Ok(ExprKind::WhileDo {
+        condition,
+        do_block,
+    }
+    .into())
 }
 
 fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
@@ -276,6 +298,60 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_while_binop() {
+        let expression = parse(&tokenize("while true do 1 + 1"));
+        assert!(expression.is_ok());
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::WhileDo {
+                condition: ExprKind::Literal {
+                    value: "true".into()
+                }
+                .into(),
+                do_block: ExprKind::BinaryOperation {
+                    left: ExprKind::Literal { value: "1".into() }.into(),
+                    operation: "+".into(),
+                    right: ExprKind::Literal { value: "1".into() }.into()
+                }
+                .into()
+            }
+            .into()
+        )
+    }
+
+    #[test]
+    fn test_while_block() {
+        let expression = parse(&tokenize("while true do {1 + 1}"));
+        dbg!(&expression);
+        assert!(expression.is_ok());
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::WhileDo {
+                condition: ExprKind::Literal {
+                    value: "true".into()
+                }
+                .into(),
+                do_block: ExprKind::Block {
+                    expressions: vec![ExprKind::BinaryOperation {
+                        left: ExprKind::Literal { value: "1".into() }.into(),
+                        operation: "+".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
+                    }
+                    .into()]
+                }
+                .into()
+            }
+            .into()
+        )
+    }
 
     #[test]
     fn test_boolean_literal() {
