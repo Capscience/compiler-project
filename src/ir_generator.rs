@@ -155,12 +155,17 @@ impl IRGenerator {
                     self.emit(Instruction::Label { name: l_end });
                     var = self.var_none.clone();
                 }
-            } // _ => todo!(),
+            }
             ExprKind::Block { expressions } => {
                 for expr in expressions {
                     var = self.visit(symbol_table, expr);
                 }
             }
+            ExprKind::Unary { target } => todo!(),
+            ExprKind::WhileDo {
+                condition,
+                do_block,
+            } => todo!(),
         };
         var
     }
@@ -227,11 +232,11 @@ mod tests {
         );
 
         assert_eq!(
-            instructions[0].to_string(),
+            instructions[1].to_string(),
             "LoadIntConst(1, x1)".to_string()
         );
         assert_eq!(
-            instructions[1].to_string(),
+            instructions[2].to_string(),
             "LoadBoolConst(true, x2)".to_string()
         );
     }

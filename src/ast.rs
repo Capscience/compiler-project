@@ -57,6 +57,13 @@ pub enum ExprKind {
     VarDeclaration {
         identifier: String,
     },
+    Unary {
+        target: Box<Expr>,
+    },
+    WhileDo {
+        condition: Box<Expr>,
+        do_block: Box<Expr>,
+    },
 }
 
 impl std::convert::From<ExprKind> for Box<Expr> {

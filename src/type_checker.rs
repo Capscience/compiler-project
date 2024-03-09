@@ -125,6 +125,11 @@ impl TypeChecker {
                 self.symbol_table.declare(identifier.to_string())?;
                 Type::None
             }
+            ExprKind::Unary { target } => todo!(),
+            ExprKind::WhileDo {
+                condition,
+                do_block,
+            } => todo!(),
         };
 
         node.type_ = type_.clone();
