@@ -68,10 +68,8 @@ fn parse_expr(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String>
                 consume(iter, Some(vec!["{"]));
                 parse_block(iter)?
             }
-            // "(" => parse_parenthesized(iter)?,
-            // "if" => parse_if_expression(iter)?,
-            // "var" => parse_var_declaration(iter)?,
-            // "while" => parse_while(iter)?,
+            "if" => parse_if_expression(iter)?,
+            "while" => parse_while(iter)?,
             _ => parse_assignment(iter)?,
         },
     )
@@ -180,7 +178,7 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, Strin
         "(" => return parse_parenthesized(iter),
         "if" => return parse_if_expression(iter),
         "var" => return parse_var_declaration(iter),
-        "while" => return parse_while(iter),
+        "-" | "not" => return parse_unary(iter),
         _ => {} // Continue according to token type
     }
 
@@ -189,6 +187,13 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, Strin
         TokenType::Identifier => parse_identifier(iter),
         _ => Err(format!("Expected IntLiteral, got {:?}", token.text)),
     }
+}
+
+fn parse_unary(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
+    let operator = consume(iter, Some(vec!["-", "not"]))
+        .expect("Tried to parse unary without having an unary operator next!");
+    let target = parse_factor(iter)?;
+    Ok(ExprKind::Unary { operator, target }.into())
 }
 
 fn parse_parenthesized(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
@@ -299,6 +304,95 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_int_unary() {
+        let expression = parse(&tokenize("-1"));
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::Unary {
+                operator: "-".to_string(),
+                target: ExprKind::Literal {
+                    value: "1".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_bool_unary() {
+        let expression = parse(&tokenize("not true"));
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::Unary {
+                operator: "not".to_string(),
+                target: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_unary_bool_binop() {
+        let expression = parse(&tokenize("true != not true"));
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into(),
+                operation: "!=".to_string(),
+                right: ExprKind::Unary {
+                    operator: "not".to_string(),
+                    target: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            }
+            .into()
+        );
+
+        let expression2 = parse(&tokenize("not true != true"));
+        assert_eq!(
+            expression2
+                .unwrap()
+                .first()
+                .expect("Parsing returned nothing!"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::Unary {
+                    operator: "not".to_string(),
+                    target: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()
+                }
+                .into(),
+                operation: "!=".to_string(),
+                right: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
 
     #[test]
     fn test_while_binop() {
