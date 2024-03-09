@@ -66,6 +66,7 @@ pub enum ExprKind {
         identifier: String,
     },
     Unary {
+        operator: String,
         target: Box<Expr>,
     },
     WhileDo {

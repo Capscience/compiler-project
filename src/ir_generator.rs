@@ -161,7 +161,7 @@ impl IRGenerator {
                     var = self.visit(symbol_table, &expr);
                 }
             }
-            ExprKind::Unary { target } => todo!(),
+            ExprKind::Unary { operator, target } => todo!(),
             ExprKind::WhileDo {
                 condition,
                 do_block,

@@ -136,7 +136,7 @@ impl Interpreter {
                 self.symbol_table.declare(identifier.to_string())?;
                 Value::None
             }
-            ExprKind::Unary { target } => todo!(),
+            ExprKind::Unary { operator, target } => todo!(),
             ExprKind::WhileDo {
                 condition,
                 do_block,
