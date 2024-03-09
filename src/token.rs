@@ -50,7 +50,7 @@ impl TokenType {
         match self {
             Self::Identifier => Regex::new(r"^[a-zA-Z_]+[\w_-]*").unwrap(),
             Self::IntLiteral => Regex::new(r"^[0-9]+").unwrap(),
-            Self::Operator => Regex::new(r"^(and\b|or\b|<=|==|>=|[><+\-=*/])").unwrap(),
+            Self::Operator => Regex::new(r"^(and\b|or\b|not\b|<=|==|>=|!=|[><+\-=*/%])").unwrap(),
             Self::Delimiter => Regex::new(r"^[,;}{)(]").unwrap(),
             Self::WhiteSpace => Regex::new(r"^\s+").unwrap(),
             Self::Comment => Regex::new(r"^(//.*)|^/\*(.|\n)*?\*/").unwrap(),
