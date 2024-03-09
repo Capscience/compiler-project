@@ -18,6 +18,14 @@ impl Expr {
             }
         }
     }
+
+    pub fn first(&self) -> Result<&Expr, String> {
+        if matches!(self.content, ExprKind::Block { .. }) {
+            self.content.get_first().ok_or("Empty block!".to_string())
+        } else {
+            Err("Tried calling .first() on an Expr that is not ExprKind::Block!".to_string())
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,6 +72,7 @@ pub enum ExprKind {
         condition: Box<Expr>,
         do_block: Box<Expr>,
     },
+    None,
 }
 
 impl std::convert::From<ExprKind> for Box<Expr> {
