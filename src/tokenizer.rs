@@ -33,7 +33,30 @@ pub fn tokenize(source_code: &str) -> Vec<Token> {
             )
         }
     }
-    tokens
+
+    // Hacky way to add ; where it is optional in the language spec,
+    // but required by my parser
+    let mut new_tokens = Vec::new();
+    let mut previous = Token {
+        text: "".to_string(),
+        tokentype: TokenType::Comment,
+        range: None,
+    };
+    for token in &tokens {
+        if previous.text.as_str() == "}"
+            && token.text.as_str() != "}"
+            && token.text.as_str() != "else"
+        {
+            new_tokens.push(Token {
+                text: ";".to_string(),
+                tokentype: TokenType::Delimiter,
+                range: None,
+            });
+        }
+        new_tokens.push(token.clone());
+        previous = token.clone();
+    }
+    new_tokens
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::fmt;
 use std::ops::Range;
 use strum_macros::EnumIter;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub text: String,
     pub tokentype: TokenType,
@@ -34,7 +34,7 @@ impl PartialEq for Token {
 /// The order of these variants matters!
 /// For example, comment must be before operators, othervise // will be interpreted
 /// as 2 divisions instead of a comment.
-#[derive(Debug, PartialEq, EnumIter)]
+#[derive(Debug, PartialEq, EnumIter, Clone)]
 pub enum TokenType {
     Comment,
     WhiteSpace,
