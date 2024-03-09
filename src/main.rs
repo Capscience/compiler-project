@@ -54,7 +54,9 @@ fn interpreter_cli() {
             if let Err(error) = ast {
                 println!("Error while parsing: {}", error);
             } else {
-                for expression in ast.unwrap() {
+                let ast = ast.unwrap();
+                let exprs = ast.content.expressions().expect("No expressions found!");
+                for expression in exprs {
                     let result = interpreter.interpret(expression);
                     if let Err(error) = result {
                         println!("Error while interpreting: {}", error);
@@ -90,11 +92,9 @@ fn ir_gen(filename: PathBuf) {
         std::process::exit(1);
     }
     let mut ast = ast_result.expect("Handled above.");
-    for mut node in &mut ast {
-        if let Err(error) = typechecker.typecheck(&mut node) {
-            println!("Typecheck error: {error}");
-            std::process::exit(1);
-        }
+    if let Err(error) = typechecker.typecheck(&mut ast) {
+        println!("Typecheck error: {error}");
+        std::process::exit(1);
     }
     let ir = generate_ir(HashMap::new(), ast);
     for line in ir {
@@ -114,11 +114,9 @@ fn asm_gen(filename: PathBuf) {
         std::process::exit(1);
     }
     let mut ast = ast_result.expect("Handled above.");
-    for mut node in &mut ast {
-        if let Err(error) = typechecker.typecheck(&mut node) {
-            println!("Typecheck error: {error}");
-            std::process::exit(1);
-        }
+    if let Err(error) = typechecker.typecheck(&mut ast) {
+        println!("Typecheck error: {error}");
+        std::process::exit(1);
     }
     let instructions = generate_ir(HashMap::new(), ast);
     let assembly = generate_assembly(&instructions);

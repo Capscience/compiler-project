@@ -44,9 +44,9 @@ impl IRGenerator {
         self.instructions.push(instruction);
     }
 
-    pub fn visit(&mut self, symbol_table: &mut SymbolTable<IRVar>, expr: Expr) -> IRVar {
+    pub fn visit(&mut self, symbol_table: &mut SymbolTable<IRVar>, expr: &Expr) -> IRVar {
         let mut var = String::new();
-        match expr.content {
+        match &expr.content {
             ExprKind::Literal { value } => match expr.type_ {
                 Type::Int => {
                     var = self.new_var(Type::Int);
@@ -77,9 +77,9 @@ impl IRGenerator {
                 operation,
                 right,
             } => {
-                let var_left = self.visit(symbol_table, *left);
-                let var_right = self.visit(symbol_table, *right);
-                if &operation == "=" {
+                let var_left = self.visit(symbol_table, &*left);
+                let var_right = self.visit(symbol_table, &*right);
+                if operation.as_str() == "=" {
                     self.emit(Instruction::Copy {
                         source: var_right.clone(),
                         dest: var_left.clone(),
@@ -88,7 +88,7 @@ impl IRGenerator {
                 } else {
                     let var_result = self.new_var(expr.type_.clone());
                     self.emit(Instruction::Call {
-                        fun: operation,
+                        fun: operation.to_string(),
                         args: vec![var_left, var_right],
                         dest: var_result.clone(),
                     });
@@ -114,7 +114,7 @@ impl IRGenerator {
                     let l_else = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, *condition);
+                    let var_cond = self.visit(symbol_table, &*condition);
 
                     var = self.new_var(expr.type_.clone());
                     self.emit(Instruction::CondJump {
@@ -123,7 +123,7 @@ impl IRGenerator {
                         else_label: l_else.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    let then_return_var = self.visit(symbol_table, *if_block);
+                    let then_return_var = self.visit(symbol_table, &*if_block);
                     self.emit(Instruction::Copy {
                         source: then_return_var,
                         dest: var.clone(),
@@ -132,7 +132,7 @@ impl IRGenerator {
                         label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_else });
-                    let else_return_var = self.visit(symbol_table, *else_block);
+                    let else_return_var = self.visit(symbol_table, &*else_block);
                     self.emit(Instruction::Copy {
                         source: else_return_var,
                         dest: var.clone(),
@@ -143,7 +143,7 @@ impl IRGenerator {
                     let l_then = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, *condition);
+                    let var_cond = self.visit(symbol_table, &*condition);
 
                     self.emit(Instruction::CondJump {
                         cond: var_cond,
@@ -151,14 +151,14 @@ impl IRGenerator {
                         else_label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    self.visit(symbol_table, *if_block);
+                    self.visit(symbol_table, &*if_block);
                     self.emit(Instruction::Label { name: l_end });
                     var = self.var_none.clone();
                 }
             }
             ExprKind::Block { expressions } => {
                 for expr in expressions {
-                    var = self.visit(symbol_table, expr);
+                    var = self.visit(symbol_table, &expr);
                 }
             }
             ExprKind::Unary { target } => todo!(),
@@ -166,12 +166,13 @@ impl IRGenerator {
                 condition,
                 do_block,
             } => todo!(),
+            ExprKind::None => var = self.var_none.clone(),
         };
         var
     }
 }
 
-pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) -> Vec<Instruction> {
+pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruction> {
     let mut generator = IRGenerator::new(root_types.clone());
 
     let mut root_symtab: SymbolTable<String> = SymbolTable::new(None);
@@ -183,7 +184,8 @@ pub fn generate_ir(root_types: HashMap<String, Type>, exprs: Vec<Expr>) -> Vec<I
         name: "Start".into(),
     });
     let mut final_result = String::new();
-    for expr in exprs {
+    let exprs = ast.content.expressions();
+    for expr in exprs.expect("No expressions found!") {
         final_result = generator.visit(&mut root_symtab, expr);
     }
     let final_type = generator
@@ -217,18 +219,21 @@ mod tests {
     fn test_ir_literals() {
         let instructions = generate_ir(
             HashMap::new(),
-            vec![
-                Expr {
-                    type_: Type::Int,
-                    content: ExprKind::Literal { value: "1".into() },
-                },
-                Expr {
-                    type_: Type::Bool,
-                    content: ExprKind::Literal {
-                        value: "true".into(),
+            ExprKind::Block {
+                expressions: vec![
+                    Expr {
+                        type_: Type::Int,
+                        content: ExprKind::Literal { value: "1".into() },
                     },
-                },
-            ],
+                    Expr {
+                        type_: Type::Bool,
+                        content: ExprKind::Literal {
+                            value: "true".into(),
+                        },
+                    },
+                ],
+            }
+            .into(),
         );
 
         assert_eq!(

@@ -19,8 +19,8 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, node: Expr) -> Result<Value, Box<dyn Error>> {
-        let value = match node.content {
+    pub fn interpret(&mut self, node: &Expr) -> Result<Value, Box<dyn Error>> {
+        let value = match &node.content {
             ExprKind::Literal { value } => {
                 if let Ok(val) = value.parse::<bool>() {
                     Value::Bool { value: val }
@@ -43,10 +43,10 @@ impl Interpreter {
                 if_block,
                 else_block,
             } => {
-                if self.interpret(*condition)? == (Value::Bool { value: true }) {
-                    self.interpret(*if_block)?
+                if self.interpret(&*condition)? == (Value::Bool { value: true }) {
+                    self.interpret(&*if_block)?
                 } else if let Some(else_block) = else_block {
-                    self.interpret(*else_block)?
+                    self.interpret(&*else_block)?
                 } else {
                     Value::None
                 }
@@ -56,14 +56,14 @@ impl Interpreter {
                 operation,
                 right,
             } => {
-                let left_expr = *left;
+                let left_expr = &*left;
                 let variable_name = match left_expr.content {
                     ExprKind::Identifier { ref value } => value.to_string(),
                     ExprKind::VarDeclaration { ref identifier } => identifier.to_string(),
                     _ => String::new(),
                 };
-                let left = self.interpret(left_expr)?;
-                let right = self.interpret(*right)?;
+                let left = self.interpret(&left_expr)?;
+                let right = self.interpret(&*right)?;
                 let a = if let Value::Int { value } = left {
                     Some(value)
                 } else {
@@ -123,7 +123,7 @@ impl Interpreter {
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
                 let mut val = Value::None;
                 for expression in expressions {
-                    val = self.interpret(expression)?;
+                    val = self.interpret(&expression)?;
                 }
                 if let Some(symbol_table) = &mut self.symbol_table.parent {
                     self.symbol_table = std::mem::take(symbol_table);
@@ -133,7 +133,7 @@ impl Interpreter {
                 val
             }
             ExprKind::VarDeclaration { identifier } => {
-                self.symbol_table.declare(identifier)?;
+                self.symbol_table.declare(identifier.to_string())?;
                 Value::None
             }
             ExprKind::Unary { target } => todo!(),
@@ -141,6 +141,7 @@ impl Interpreter {
                 condition,
                 do_block,
             } => todo!(),
+            ExprKind::None => Value::None,
         };
 
         Ok(value)
@@ -160,7 +161,7 @@ mod tests {
     fn test_variable_declaration() {
         let mut interpreter = Interpreter::new();
         let a = interpreter.interpret(
-            ExprKind::BinaryOperation {
+            &ExprKind::BinaryOperation {
                 left: ExprKind::VarDeclaration {
                     identifier: "a".to_string(),
                 }
@@ -186,7 +187,7 @@ mod tests {
     fn test_literal() {
         let mut interpreter = Interpreter::new();
         let a = interpreter.interpret(
-            ExprKind::Literal {
+            &ExprKind::Literal {
                 value: "15".to_string(),
             }
             .into(),
@@ -199,7 +200,7 @@ mod tests {
     fn test_bin_op() {
         let mut interpreter = Interpreter::new();
         let a = interpreter.interpret(
-            ExprKind::BinaryOperation {
+            &ExprKind::BinaryOperation {
                 left: ExprKind::Literal {
                     value: "1".to_string(),
                 }
@@ -216,7 +217,7 @@ mod tests {
         assert_eq!(a.unwrap(), Value::Int { value: 2 });
 
         let b = interpreter.interpret(
-            ExprKind::BinaryOperation {
+            &ExprKind::BinaryOperation {
                 left: ExprKind::Literal {
                     value: "1".to_string(),
                 }
@@ -237,7 +238,7 @@ mod tests {
     fn test_if() {
         let mut interpreter = Interpreter::new();
         let a = interpreter.interpret(
-            ExprKind::IfClause {
+            &ExprKind::IfClause {
                 condition: ExprKind::BinaryOperation {
                     left: ExprKind::Literal {
                         value: "1".to_string(),
@@ -263,7 +264,7 @@ mod tests {
         assert_eq!(a.unwrap(), Value::Int { value: 1 });
 
         let b = interpreter.interpret(
-            ExprKind::IfClause {
+            &ExprKind::IfClause {
                 condition: ExprKind::BinaryOperation {
                     left: ExprKind::Literal {
                         value: "1".to_string(),
@@ -288,7 +289,7 @@ mod tests {
         assert_eq!(b.unwrap(), Value::None);
 
         let c = interpreter.interpret(
-            ExprKind::IfClause {
+            &ExprKind::IfClause {
                 condition: ExprKind::BinaryOperation {
                     left: ExprKind::Literal {
                         value: "1".to_string(),

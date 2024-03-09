@@ -130,6 +130,7 @@ impl TypeChecker {
                 condition,
                 do_block,
             } => todo!(),
+            ExprKind::None => Type::None,
         };
 
         node.type_ = type_.clone();

@@ -29,11 +29,9 @@ pub fn compile(code: String, output: &Path) {
         std::process::exit(1);
     }
     let mut ast = ast_result.expect("Handled above.");
-    for mut node in &mut ast {
-        if let Err(error) = typechecker.typecheck(&mut node) {
-            println!("Typecheck error: {error}");
-            std::process::exit(1);
-        }
+    if let Err(error) = typechecker.typecheck(&mut ast) {
+        println!("Typecheck error: {error}");
+        std::process::exit(1);
     }
     let instructions = generate_ir(HashMap::new(), ast);
     let assembly = generate_assembly(&instructions);
