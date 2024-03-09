@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprKind};
+use crate::ast::{Expr, ExprKind, Type};
 use crate::tokenizer::{Token, TokenType};
 use std::iter::Peekable;
 use std::slice::Iter;
@@ -20,33 +20,52 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
     };
 
     while iter.peek().is_some() {
-        block.push(*parse_expr(iter)?);
-        let next = iter.peek();
+        let next = iter.peek().expect("Checked on previous line.");
         // Handle block end and `;` between expressions in the block.
-        match next {
-            Some(token) => match token.text.as_str() {
-                "}" => {
-                    consume(iter, Some(vec!["}"]));
-                    break;
-                }
-                ";" => {
-                    consume(iter, Some(vec![";"]));
-                    let next = iter.peek();
-                    if let Some(token) = next {
-                        if token.text.as_str() == "}" {
-                            consume(iter, Some(vec!["}"]));
-                            block.push(ExprKind::None.into());
-                            break;
-                        }
-                    } else {
-                        block.push(ExprKind::None.into());
-                        break;
-                    }
-                }
-                _ => return Err(format!("Expected semicolon, found {:?}", token)),
-            },
-            None => {
+        match next.text.as_str() {
+            "}" => {
+                consume(iter, Some(vec!["}"]));
                 break;
+            }
+            ";" => {
+                consume(iter, Some(vec![";"]));
+                block.push(ExprKind::None.into());
+            }
+            _ => {
+                let expressions = block.expressions().expect("Should be block");
+                if expressions.len() == 0
+                    || matches!(
+                        expressions.last(),
+                        Some(Expr {
+                            content: ExprKind::None,
+                            type_: Type::None
+                        })
+                    )
+                    || matches!(
+                        expressions.last(),
+                        Some(Expr {
+                            content: ExprKind::Block { .. },
+                            type_: Type::None
+                        })
+                    )
+                {
+                    if next.text.as_str() == "{" {
+                        consume(iter, Some(vec!["{"]));
+                        block.push(*parse_block(iter)?);
+                        if let Some(next) = iter.peek() {
+                            if next.text.as_str() == "}" {
+                                consume(iter, Some(vec!["}"]));
+                                break;
+                            }
+                        }
+                        block.push(ExprKind::None.into());
+                    } else {
+                        block.push(*parse_expr(iter)?);
+                    }
+                } else {
+                    dbg!(&block);
+                    return Err(format!("Expected semicolon, got {:?}", next));
+                }
             }
         }
     }
@@ -57,25 +76,6 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
 }
 
 fn parse_expr(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    Ok(
-        match iter
-            .peek()
-            .expect("This should not be called if peek can be None!")
-            .text
-            .as_str()
-        {
-            "{" => {
-                consume(iter, Some(vec!["{"]));
-                parse_block(iter)?
-            }
-            "if" => parse_if_expression(iter)?,
-            "while" => parse_while(iter)?,
-            _ => parse_assignment(iter)?,
-        },
-    )
-}
-
-fn parse_assignment(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     let mut left = parse_binop(iter)?;
     while iter.peek().is_some() {
         if iter.peek().expect("Checked on previous line").text.as_str() != "=" {
@@ -176,8 +176,13 @@ fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, Strin
     let token = iter.peek().expect("Should never be None.");
     match token.text.as_str() {
         "(" => return parse_parenthesized(iter),
+        "{" => {
+            consume(iter, Some(vec!["{"]));
+            return parse_block(iter);
+        }
         "if" => return parse_if_expression(iter),
         "var" => return parse_var_declaration(iter),
+        "while" => return parse_while(iter),
         "-" | "not" => return parse_unary(iter),
         _ => {} // Continue according to token type
     }
@@ -304,6 +309,62 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_two_blocks_inside_block() {
+        let expr = parse(&tokenize("{ { a } { b } }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
+
+    #[test]
+    fn test_two_exprs_no_semicolon_in_block() {
+        let expr = parse(&tokenize("{ a b }"));
+        dbg!(&expr);
+        assert!(expr.is_err());
+    }
+
+    #[test]
+    fn test_if_without_semicolon_in_block() {
+        let expr = parse(&tokenize("{ if true then { a } b }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
+
+    #[test]
+    fn test_if_with_semicolon_in_block() {
+        let expr = parse(&tokenize("{ if true then { a }; b }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
+
+    #[test]
+    fn test_three_exprs_in_block_invalid_semicolon() {
+        let expr = parse(&tokenize("{ if true then { a }; b c }"));
+        dbg!(&expr);
+        assert!(expr.is_err());
+    }
+
+    #[test]
+    fn test_three_exprs_in_block_valid_semicolon() {
+        let expr = parse(&tokenize("{ if true then { a } b; c }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
+
+    #[test]
+    fn test_if_else_w_blocks_valid_semicolon() {
+        let expr = parse(&tokenize("{ if true then { a } else { b } 3 }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
+
+    // #[test]
+    fn test_block_to_var_w_call_valid() {
+        let expr = parse(&tokenize("x = { { f(a) } { b } }"));
+        dbg!(&expr);
+        assert!(expr.is_ok());
+    }
 
     #[test]
     fn test_int_unary() {
@@ -435,12 +496,15 @@ mod tests {
                 }
                 .into(),
                 do_block: ExprKind::Block {
-                    expressions: vec![ExprKind::BinaryOperation {
-                        left: ExprKind::Literal { value: "1".into() }.into(),
-                        operation: "+".into(),
-                        right: ExprKind::Literal { value: "1".into() }.into()
-                    }
-                    .into()]
+                    expressions: vec![
+                        ExprKind::BinaryOperation {
+                            left: ExprKind::Literal { value: "1".into() }.into(),
+                            operation: "+".into(),
+                            right: ExprKind::Literal { value: "1".into() }.into()
+                        }
+                        .into(),
+                        // ExprKind::None.into()
+                    ]
                 }
                 .into()
             }
@@ -528,6 +592,7 @@ mod tests {
     #[test]
     fn test_block() {
         let expression = parse(&tokenize("{ 1 + 1 }"));
+        dbg!(&expression);
         assert_eq!(
             expression
                 .unwrap()
@@ -555,7 +620,7 @@ mod tests {
     fn test_2_expressions() {
         let block = parse(&tokenize("1; 2;")).unwrap();
         let exprs = block.content.expressions().expect("Block has no content!");
-        assert_eq!(exprs.len(), 3); // 3rd is None caused by the last `;`
+        assert_eq!(exprs.len(), 4); // 3rd and 4th are None caused by the `;`
         assert_eq!(
             exprs[0],
             ExprKind::Literal {
@@ -564,7 +629,7 @@ mod tests {
             .into()
         );
         assert_eq!(
-            exprs[1],
+            exprs[2],
             ExprKind::Literal {
                 value: "2".to_string()
             }
