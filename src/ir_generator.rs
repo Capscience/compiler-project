@@ -161,7 +161,16 @@ impl IRGenerator {
                     var = self.visit(symbol_table, &expr);
                 }
             }
-            ExprKind::Unary { operator, target } => todo!(),
+            ExprKind::Unary { operator, target } => {
+                let var_target = self.visit(symbol_table, &target);
+                let var_result = self.new_var(expr.type_.clone());
+                self.emit(Instruction::Call {
+                    fun: format!("unary_{}", operator),
+                    args: vec![var_target],
+                    dest: var_result.clone(),
+                });
+                var = var_result;
+            }
             ExprKind::WhileDo {
                 condition,
                 do_block,

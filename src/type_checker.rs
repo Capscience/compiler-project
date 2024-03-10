@@ -125,7 +125,20 @@ impl TypeChecker {
                 self.symbol_table.declare(identifier.to_string())?;
                 Type::None
             }
-            ExprKind::Unary { operator, target } => todo!(),
+            ExprKind::Unary { operator, target } => {
+                let target_type = self.typecheck(target)?;
+                if operator.as_str() == "not" && target_type == Type::Bool {
+                    Type::Bool
+                } else if operator.as_str() == "-" && target_type == Type::Int {
+                    Type::Int
+                } else {
+                    return Err(format!(
+                        "Invalid unary operator `{}` for type `{:?}`",
+                        operator, target_type
+                    )
+                    .into());
+                }
+            }
             ExprKind::WhileDo {
                 condition,
                 do_block,
@@ -141,6 +154,83 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_unary_int() {
+        let mut checker = TypeChecker::new();
+        assert!(matches!(
+            checker
+                .typecheck(
+                    &mut ExprKind::Block {
+                        expressions: vec![ExprKind::Unary {
+                            operator: "-".to_string(),
+                            target: ExprKind::Literal {
+                                value: "1".to_string()
+                            }
+                            .into()
+                        }
+                        .into()]
+                    }
+                    .into()
+                )
+                .unwrap(),
+            Type::Int
+        ));
+    }
+
+    #[test]
+    fn test_unary_bool() {
+        let mut checker = TypeChecker::new();
+        assert!(matches!(
+            checker
+                .typecheck(
+                    &mut ExprKind::Unary {
+                        operator: "not".to_string(),
+                        target: ExprKind::Literal {
+                            value: "true".to_string()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
+                .unwrap(),
+            Type::Bool
+        ));
+    }
+
+    #[test]
+    fn test_unary_not_int() {
+        let mut checker = TypeChecker::new();
+        assert!(checker
+            .typecheck(
+                &mut ExprKind::Unary {
+                    operator: "not".to_string(),
+                    target: ExprKind::Literal {
+                        value: "1".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn test_unary_minus_bool() {
+        let mut checker = TypeChecker::new();
+        assert!(checker
+            .typecheck(
+                &mut ExprKind::Unary {
+                    operator: "-".to_string(),
+                    target: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()
+                }
+                .into()
+            )
+            .is_err());
+    }
 
     #[test]
     fn test_typed_ast_literal() {

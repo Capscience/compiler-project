@@ -153,7 +153,16 @@ fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String
     };
 
     match fun.as_str() {
-        // unary operators here later
+        "unary_-" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit("negq %rax");
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
+        "unary_not" => {
+            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
+            emit("xorq $1, %rax");
+            emit(format!("movq %rax, {}", dest_ref).as_str());
+        }
         "+" => {
             emit(format!("movq {}, %rax", arg_refs[0]).as_str());
             emit(format!("addq {}, %rax", arg_refs[1]).as_str());
