@@ -77,7 +77,17 @@ impl IRGenerator {
                 operation,
                 right,
             } => {
-                let var_left = self.visit(symbol_table, &*left);
+                let var_left = match &left.content {
+                    ExprKind::VarDeclaration { identifier, .. } => {
+                        let _ = symbol_table
+                            .declare(identifier.clone(), self.new_var(expr.type_.clone()));
+                        symbol_table
+                            .get(&identifier)
+                            .expect("This should never happen.")
+                            .to_string()
+                    }
+                    _ => self.visit(symbol_table, &*left),
+                };
                 let var_right = self.visit(symbol_table, &*right);
                 if operation.as_str() == "=" {
                     self.emit(Instruction::Copy {
@@ -95,15 +105,7 @@ impl IRGenerator {
                     var = var_result;
                 }
             }
-            ExprKind::VarDeclaration { identifier } => {
-                let _ = symbol_table.declare(identifier.clone());
-                let _ = symbol_table.set(identifier.clone(), self.new_var(Type::None));
-                var = symbol_table
-                    .get(&identifier)
-                    .expect("This should never happen.")
-                    .to_string();
-                // TODO: proper error handling
-            }
+            ExprKind::VarDeclaration { .. } => {} // Handled in BinOp =
             ExprKind::IfClause {
                 condition,
                 if_block,
@@ -160,6 +162,7 @@ impl IRGenerator {
                 for expr in expressions {
                     var = self.visit(symbol_table, &expr);
                 }
+                println!("Var: {var}, type: {:?}", self.var_types.get(&var));
             }
             ExprKind::Unary { operator, target } => {
                 let var_target = self.visit(symbol_table, &target);
@@ -186,17 +189,14 @@ pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruct
 
     let mut root_symtab: SymbolTable<String> = SymbolTable::new(None);
     for key in root_types.keys() {
-        root_symtab.declare(key.to_string()).unwrap();
-        root_symtab.set(key.to_string(), key.to_string()).unwrap();
+        root_symtab
+            .declare(key.to_string(), key.to_string())
+            .unwrap();
     }
     generator.emit(Instruction::Label {
         name: "Start".into(),
     });
-    let mut final_result = String::new();
-    let exprs = ast.content.expressions();
-    for expr in exprs.expect("No expressions found!") {
-        final_result = generator.visit(&mut root_symtab, expr);
-    }
+    let final_result = generator.visit(&mut root_symtab, &ast);
     let final_type = generator
         .var_types
         .get(&final_result)

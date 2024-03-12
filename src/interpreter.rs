@@ -57,11 +57,6 @@ impl Interpreter {
                 right,
             } => {
                 let left_expr = &*left;
-                let variable_name = match left_expr.content {
-                    ExprKind::Identifier { ref value } => value.to_string(),
-                    ExprKind::VarDeclaration { ref identifier } => identifier.to_string(),
-                    _ => String::new(),
-                };
                 let left = self.interpret(&left_expr)?;
                 let right = self.interpret(&*right)?;
                 let a = if let Value::Int { value } = left {
@@ -109,11 +104,46 @@ impl Interpreter {
                         value: a.ok_or("Invalid type!")? != b.ok_or("Invalid type!")?,
                     },
                     "=" => {
-                        if variable_name.is_empty() {
-                            return Err("Invalid assignment!".into());
-                        }
-                        self.symbol_table.set(variable_name.clone(), right)?;
-                        Value::None
+                        let var_name = match &left_expr.content {
+                            ExprKind::VarDeclaration {
+                                identifier,
+                                annotated_type,
+                            } => {
+                                if let Some(var_type) = annotated_type {
+                                    match var_type.as_str() {
+                                        "Int" => self.symbol_table.declare(
+                                            identifier.to_string(),
+                                            Value::Int { value: 0 },
+                                        )?,
+                                        "Bool" => self.symbol_table.declare(
+                                            identifier.to_string(),
+                                            Value::Bool { value: false },
+                                        )?,
+                                        "None" => self
+                                            .symbol_table
+                                            .declare(identifier.to_string(), Value::None)?,
+                                        _ => {
+                                            return Err(format!(
+                                                "Invalid type annotation `{}`",
+                                                var_type
+                                            )
+                                            .into())
+                                        }
+                                    };
+                                    identifier
+                                } else {
+                                    let _ = &self
+                                        .symbol_table
+                                        .declare(identifier.to_string(), right)?;
+                                    identifier
+                                }
+                            }
+                            ExprKind::Identifier { value } => value,
+                            _ => return Err("Invalid assignment!".into()),
+                        };
+
+                        self.symbol_table.set(var_name.clone(), right)?;
+                        right
                     }
                     _ => return Err("Invalid binary operator".into()),
                 }
@@ -132,10 +162,7 @@ impl Interpreter {
                 }
                 val
             }
-            ExprKind::VarDeclaration { identifier } => {
-                self.symbol_table.declare(identifier.to_string())?;
-                Value::None
-            }
+            ExprKind::VarDeclaration { .. } => Value::None, // Declaration handled in BinOp =
             ExprKind::Unary { operator, target } => todo!(),
             ExprKind::WhileDo {
                 condition,
@@ -164,6 +191,7 @@ mod tests {
             &ExprKind::BinaryOperation {
                 left: ExprKind::VarDeclaration {
                     identifier: "a".to_string(),
+                    annotated_type: None,
                 }
                 .into(),
                 operation: "=".to_string(),
@@ -176,7 +204,7 @@ mod tests {
         );
         dbg!(&a);
         assert!(a.is_ok());
-        assert_eq!(a.unwrap(), Value::None);
+        assert_eq!(a.unwrap(), Value::Int { value: 10 });
         assert_eq!(
             interpreter.get_variable(&String::from("a")),
             Some(&Value::Int { value: 10 })

@@ -28,7 +28,7 @@ where
 
     pub fn set(&mut self, symbol: String, new_value: T) -> Result<(), &str> {
         if let Some(value) = self.symbols.get(&symbol) {
-            if value != &T::default() && discriminant(value) != discriminant(&new_value) {
+            if discriminant(value) != discriminant(&new_value) {
                 return Err("Incompatible types!");
             }
             self.symbols.insert(symbol, new_value);
@@ -40,12 +40,12 @@ where
         Ok(())
     }
 
-    pub fn declare(&mut self, symbol: String) -> Result<(), &str> {
+    pub fn declare(&mut self, symbol: String, value: T) -> Result<String, &str> {
         if self.get(&symbol).is_some() {
             Err("Variable already exists!")
         } else {
-            self.symbols.insert(symbol, T::default());
-            Ok(())
+            self.symbols.insert(symbol.clone(), value);
+            Ok(symbol)
         }
     }
 }

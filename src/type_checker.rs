@@ -66,21 +66,48 @@ impl TypeChecker {
                 right,
             } => {
                 let mut left_expr = left;
-                let variable_name = match left_expr.content {
-                    ExprKind::Identifier { ref value } => value.into(),
-                    ExprKind::VarDeclaration { ref identifier } => identifier.into(),
-                    _ => String::new(),
-                };
                 let left = self.typecheck(&mut left_expr)?;
                 let right = self.typecheck(&mut *right)?;
                 match operation.as_str() {
                     "=" => {
-                        if variable_name.is_empty() {
-                            return Err("Invalid assignment!".into());
-                        }
-                        // Fails, if types are missmatched
-                        self.symbol_table.set(variable_name.clone(), right)?;
-                        Type::None
+                        let var_name = match &left_expr.content {
+                            ExprKind::VarDeclaration {
+                                identifier,
+                                annotated_type,
+                            } => {
+                                if let Some(var_type) = annotated_type {
+                                    match var_type.as_str() {
+                                        "Int" => self
+                                            .symbol_table
+                                            .declare(identifier.to_string(), Type::Int)?,
+                                        "Bool" => self
+                                            .symbol_table
+                                            .declare(identifier.to_string(), Type::Bool)?,
+                                        "None" => self
+                                            .symbol_table
+                                            .declare(identifier.to_string(), Type::None)?,
+                                        _ => {
+                                            return Err(format!(
+                                                "Invalid type annotation `{}`",
+                                                var_type
+                                            )
+                                            .into())
+                                        }
+                                    };
+                                    identifier
+                                } else {
+                                    let _ = &self
+                                        .symbol_table
+                                        .declare(identifier.to_string(), right.clone())?;
+                                    identifier
+                                }
+                            }
+                            ExprKind::Identifier { value } => value,
+                            _ => return Err("Invalid assignment!".into()),
+                        };
+
+                        self.symbol_table.set(var_name.clone(), right.clone())?;
+                        right
                     }
                     "<" | ">" | "==" | ">=" | "<=" | "!=" => {
                         if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
@@ -121,10 +148,7 @@ impl TypeChecker {
                 }
                 val
             }
-            ExprKind::VarDeclaration { identifier } => {
-                self.symbol_table.declare(identifier.to_string())?;
-                Type::None
-            }
+            ExprKind::VarDeclaration { .. } => Type::None, // Handled in BinOp =
             ExprKind::Unary { operator, target } => {
                 let target_type = self.typecheck(target)?;
                 if operator.as_str() == "not" && target_type == Type::Bool {
@@ -297,14 +321,15 @@ mod tests {
     }
 
     #[test]
-    fn test_assignment() {
+    fn test_declare_and_assign_new_val() {
         let mut checker = TypeChecker::new();
         assert!(matches!(
             &checker
                 .typecheck(
                     &mut ExprKind::BinaryOperation {
                         left: ExprKind::VarDeclaration {
-                            identifier: "a".into()
+                            identifier: "a".into(),
+                            annotated_type: None,
                         }
                         .into(),
                         operation: "=".into(),
@@ -313,7 +338,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Type::None
+            Type::Int
         ));
 
         assert!(matches!(
@@ -327,7 +352,7 @@ mod tests {
                     .into()
                 )
                 .unwrap(),
-            Type::None
+            Type::Int
         ));
 
         assert!(&checker
@@ -521,16 +546,23 @@ mod tests {
                             value: "true".into()
                         }
                         .into(),
-                        if_block: ExprKind::BinaryOperation {
-                            left: ExprKind::VarDeclaration {
-                                identifier: "a".into()
-                            }
-                            .into(),
-                            operation: "=".into(),
-                            right: ExprKind::Literal {
-                                value: "true".into()
-                            }
-                            .into()
+                        if_block: ExprKind::Block {
+                            expressions: vec![
+                                ExprKind::BinaryOperation {
+                                    left: ExprKind::VarDeclaration {
+                                        identifier: "a".into(),
+                                        annotated_type: None,
+                                    }
+                                    .into(),
+                                    operation: "=".into(),
+                                    right: ExprKind::Literal {
+                                        value: "true".into()
+                                    }
+                                    .into()
+                                }
+                                .into(),
+                                ExprKind::None.into()
+                            ]
                         }
                         .into(),
                         else_block: None,

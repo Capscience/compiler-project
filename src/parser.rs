@@ -234,8 +234,30 @@ fn parse_if_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>
 fn parse_var_declaration(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     consume(iter, Some(vec!["var"]));
     let identifier = parse_identifier(iter)?;
+
+    let annotated_type = if let Some(_) = consume(iter, Some(vec![":"])) {
+        Some(consume(iter, None).ok_or("Type annotation empty!")?)
+    } else {
+        None
+    };
+
+    if consume(iter, Some(vec!["="])).is_none() {
+        return Err("Expected type annotation or assignment!".to_string());
+    }
+
+    let right = parse_binop(iter)?;
+
     if let ExprKind::Identifier { value } = identifier.content {
-        Ok(ExprKind::VarDeclaration { identifier: value }.into())
+        Ok(ExprKind::BinaryOperation {
+            left: ExprKind::VarDeclaration {
+                identifier: value,
+                annotated_type,
+            }
+            .into(),
+            operation: "=".to_string(),
+            right,
+        }
+        .into())
     } else {
         Err(format!("Expected identifier, got {:?}", *identifier))
     }
@@ -576,7 +598,33 @@ mod tests {
                 .expect("Should be Some, else test should fail"),
             &ExprKind::BinaryOperation {
                 left: ExprKind::VarDeclaration {
-                    identifier: "a".to_string()
+                    identifier: "a".to_string(),
+                    annotated_type: None,
+                }
+                .into(),
+                operation: "=".to_string(),
+                right: ExprKind::Literal {
+                    value: "10".to_string()
+                }
+                .into(),
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_typed_var_declaration() {
+        let expression = parse(&tokenize("var a: Int = 10"));
+
+        assert_eq!(
+            expression
+                .unwrap()
+                .first()
+                .expect("Should be Some, else test should fail"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::VarDeclaration {
+                    identifier: "a".to_string(),
+                    annotated_type: Some("Int".to_string()),
                 }
                 .into(),
                 operation: "=".to_string(),

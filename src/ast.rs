@@ -64,6 +64,7 @@ pub enum ExprKind {
     },
     VarDeclaration {
         identifier: String,
+        annotated_type: Option<String>,
     },
     Unary {
         operator: String,
