@@ -17,6 +17,8 @@ fn main() {
         },
         3 => match args[1].as_str() {
             "tokens" => cli_tokenize(args[2].clone().into()),
+            "ast" => cli_ast(args[2].clone().into()),
+            "typecheck" => cli_typecheck(args[2].clone().into()),
             "ir" => ir_gen(args[2].clone().into()),
             "asm" => asm_gen(args[2].clone().into()),
             "compile" => cli_compile(args[2].clone().into(), "a.out".into()),
@@ -75,6 +77,33 @@ fn cli_tokenize(codefile: PathBuf) {
     for token in tokens {
         print!("{}, ", token);
     }
+    print!("\n");
+}
+
+fn cli_ast(codefile: PathBuf) {
+    let code = fs::read_to_string(codefile).expect("Codefile not found!");
+    let ast_result = parse(&tokenize(&code));
+    if let Err(error) = &ast_result {
+        eprint!("Parsing failed with error: {error}");
+    }
+    let ast = ast_result.unwrap();
+    print!("{:?}", ast);
+    print!("\n");
+}
+
+fn cli_typecheck(codefile: PathBuf) {
+    let code = fs::read_to_string(codefile).expect("Codefile not found!");
+    let ast_result = parse(&tokenize(&code));
+    if let Err(error) = &ast_result {
+        eprint!("Parsing failed with error: {error}");
+    }
+    let mut ast = ast_result.unwrap();
+    let mut typechecker = TypeChecker::new();
+    if let Err(error) = typechecker.typecheck(&mut ast) {
+        println!("Typecheck error: {error}");
+        std::process::exit(1);
+    }
+    print!("{:?}", ast);
     print!("\n");
 }
 
