@@ -150,7 +150,7 @@ fn asm_gen(filename: PathBuf) {
     let instructions = generate_ir(HashMap::new(), ast);
     let assembly = generate_assembly(&instructions);
     for line in assembly.lines() {
-        println!("{}", line.to_string());
+        println!("{}", line);
     }
 }
 

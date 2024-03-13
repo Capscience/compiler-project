@@ -33,7 +33,7 @@ fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
             }
             _ => {
                 let expressions = block.expressions().expect("Should be block");
-                if expressions.len() == 0
+                if expressions.is_empty()
                     || matches!(
                         expressions.last(),
                         Some(Expr {
@@ -235,7 +235,7 @@ fn parse_var_declaration(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Exp
     consume(iter, Some(vec!["var"]));
     let identifier = parse_identifier(iter)?;
 
-    let annotated_type = if let Some(_) = consume(iter, Some(vec![":"])) {
+    let annotated_type = if consume(iter, Some(vec![":"])).is_some() {
         Some(consume(iter, None).ok_or("Type annotation empty!")?)
     } else {
         None

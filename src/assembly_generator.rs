@@ -46,7 +46,7 @@ impl Locals {
 pub fn generate_assembly(instructions: &[Instruction]) -> String {
     let mut lines = Vec::new();
     let mut emit = |line: &str| {
-        let _ = lines.push(line.to_string());
+        lines.push(line.to_string());
     };
 
     let locals = Locals::new(get_all_variables(instructions));
@@ -142,7 +142,7 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
 fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String {
     let mut lines = Vec::new();
     let mut emit = |line: &str| {
-        let _ = lines.push(line.to_string());
+        lines.push(line.to_string());
     };
     let mut emit_comparison = |setcc_instruction: &str| {
         emit("xor %rax, %rax");
