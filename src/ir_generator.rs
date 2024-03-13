@@ -162,7 +162,6 @@ impl IRGenerator {
                 for expr in expressions {
                     var = self.visit(symbol_table, expr);
                 }
-                println!("Var: {var}, type: {:?}", self.var_types.get(&var));
             }
             ExprKind::Unary { operator, target } => {
                 let var_target = self.visit(symbol_table, target);
@@ -175,9 +174,32 @@ impl IRGenerator {
                 var = var_result;
             }
             ExprKind::WhileDo {
-                condition: _,
-                do_block: _,
-            } => todo!(),
+                condition,
+                do_block,
+            } => {
+                let l_while = self.new_label();
+                let l_do = self.new_label();
+                let l_end = self.new_label();
+
+                self.emit(Instruction::Label {
+                    name: l_while.clone(),
+                });
+
+                let var_cond = self.visit(symbol_table, condition);
+
+                self.emit(Instruction::CondJump {
+                    cond: var_cond,
+                    then_label: l_do.clone(),
+                    else_label: l_end.clone(),
+                });
+                self.emit(Instruction::Label { name: l_do });
+                // Do-block return value is never used, so ignore it
+                let _ = self.visit(symbol_table, do_block);
+                self.emit(Instruction::Jump { label: l_while });
+                self.emit(Instruction::Label { name: l_end });
+
+                var = self.var_none.clone();
+            }
             ExprKind::None => var = self.var_none.clone(),
         };
         var
