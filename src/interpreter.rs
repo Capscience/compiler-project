@@ -31,7 +31,7 @@ impl Interpreter {
                 }
             }
             ExprKind::Identifier { value } => {
-                let identifier_value = self.symbol_table.get(&value);
+                let identifier_value = self.symbol_table.get(value);
                 if let Some(val) = identifier_value {
                     *val
                 } else {
@@ -43,10 +43,10 @@ impl Interpreter {
                 if_block,
                 else_block,
             } => {
-                if self.interpret(&*condition)? == (Value::Bool { value: true }) {
-                    self.interpret(&*if_block)?
+                if self.interpret(condition)? == (Value::Bool { value: true }) {
+                    self.interpret(if_block)?
                 } else if let Some(else_block) = else_block {
-                    self.interpret(&*else_block)?
+                    self.interpret(else_block)?
                 } else {
                     Value::None
                 }
@@ -56,9 +56,9 @@ impl Interpreter {
                 operation,
                 right,
             } => {
-                let left_expr = &*left;
-                let left = self.interpret(&left_expr)?;
-                let right = self.interpret(&*right)?;
+                let left_expr = left;
+                let left = self.interpret(left_expr)?;
+                let right = self.interpret(right)?;
                 let a = if let Value::Int { value } = left {
                     Some(value)
                 } else {
@@ -153,7 +153,7 @@ impl Interpreter {
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
                 let mut val = Value::None;
                 for expression in expressions {
-                    val = self.interpret(&expression)?;
+                    val = self.interpret(expression)?;
                 }
                 if let Some(symbol_table) = &mut self.symbol_table.parent {
                     self.symbol_table = std::mem::take(symbol_table);
@@ -163,11 +163,8 @@ impl Interpreter {
                 val
             }
             ExprKind::VarDeclaration { .. } => Value::None, // Declaration handled in BinOp =
-            ExprKind::Unary { operator, target } => todo!(),
-            ExprKind::WhileDo {
-                condition,
-                do_block,
-            } => todo!(),
+            ExprKind::Unary { .. } => todo!(),
+            ExprKind::WhileDo { .. } => todo!(),
             ExprKind::None => Value::None,
         };
 
