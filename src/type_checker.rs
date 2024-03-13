@@ -32,7 +32,7 @@ impl TypeChecker {
                 }
             }
             ExprKind::Identifier { value } => {
-                let identifier_value = self.symbol_table.get(&value);
+                let identifier_value = self.symbol_table.get(value);
                 if let Some(val) = identifier_value {
                     val.clone()
                 } else {
@@ -65,8 +65,8 @@ impl TypeChecker {
                 operation,
                 right,
             } => {
-                let mut left_expr = left;
-                let left = self.typecheck(&mut left_expr)?;
+                let left_expr = left;
+                let left = self.typecheck(left_expr)?;
                 let right = self.typecheck(&mut *right)?;
                 match operation.as_str() {
                     "=" => {
@@ -138,8 +138,8 @@ impl TypeChecker {
                 self.symbol_table =
                     SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
                 let mut val = Type::None;
-                for mut expression in expressions {
-                    val = self.typecheck(&mut expression)?;
+                for expression in expressions {
+                    val = self.typecheck(expression)?;
                 }
                 if let Some(symbol_table) = &mut self.symbol_table.parent {
                     self.symbol_table = std::mem::take(symbol_table);
@@ -166,7 +166,13 @@ impl TypeChecker {
             ExprKind::WhileDo {
                 condition,
                 do_block,
-            } => todo!(),
+            } => {
+                if self.typecheck(condition)? != Type::Bool {
+                    return Err("While loop condition must be type Bool!".into());
+                }
+                let _ = self.typecheck(do_block);
+                Type::None
+            }
             ExprKind::None => Type::None,
         };
 
@@ -178,6 +184,49 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_while_invalid_cond() {
+        let mut checker = TypeChecker::new();
+        assert!(checker
+            .typecheck(
+                &mut ExprKind::WhileDo {
+                    condition: ExprKind::Literal {
+                        value: "1".to_string()
+                    }
+                    .into(),
+                    do_block: ExprKind::Block {
+                        expressions: Vec::new()
+                    }
+                    .into()
+                }
+                .into()
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn test_valid_while() {
+        let mut checker = TypeChecker::new();
+        assert_eq!(
+            checker
+                .typecheck(
+                    &mut ExprKind::WhileDo {
+                        condition: ExprKind::Literal {
+                            value: "true".to_string()
+                        }
+                        .into(),
+                        do_block: ExprKind::Block {
+                            expressions: Vec::new()
+                        }
+                        .into()
+                    }
+                    .into()
+                )
+                .unwrap(),
+            Type::None
+        );
+    }
 
     #[test]
     fn test_unary_int() {
