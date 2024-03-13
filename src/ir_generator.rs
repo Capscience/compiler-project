@@ -68,7 +68,7 @@ impl IRGenerator {
             },
             ExprKind::Identifier { value } => {
                 var = symbol_table
-                    .get(&value)
+                    .get(value)
                     .expect("Type checker should have caught this missing value")
                     .to_string();
             }
@@ -82,13 +82,13 @@ impl IRGenerator {
                         let _ = symbol_table
                             .declare(identifier.clone(), self.new_var(expr.type_.clone()));
                         symbol_table
-                            .get(&identifier)
+                            .get(identifier)
                             .expect("This should never happen.")
                             .to_string()
                     }
-                    _ => self.visit(symbol_table, &*left),
+                    _ => self.visit(symbol_table, left),
                 };
-                let var_right = self.visit(symbol_table, &*right);
+                let var_right = self.visit(symbol_table, right);
                 if operation.as_str() == "=" {
                     self.emit(Instruction::Copy {
                         source: var_right.clone(),
@@ -116,7 +116,7 @@ impl IRGenerator {
                     let l_else = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, &*condition);
+                    let var_cond = self.visit(symbol_table, condition);
 
                     var = self.new_var(expr.type_.clone());
                     self.emit(Instruction::CondJump {
@@ -125,7 +125,7 @@ impl IRGenerator {
                         else_label: l_else.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    let then_return_var = self.visit(symbol_table, &*if_block);
+                    let then_return_var = self.visit(symbol_table, if_block);
                     self.emit(Instruction::Copy {
                         source: then_return_var,
                         dest: var.clone(),
@@ -134,7 +134,7 @@ impl IRGenerator {
                         label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_else });
-                    let else_return_var = self.visit(symbol_table, &*else_block);
+                    let else_return_var = self.visit(symbol_table, else_block);
                     self.emit(Instruction::Copy {
                         source: else_return_var,
                         dest: var.clone(),
@@ -145,7 +145,7 @@ impl IRGenerator {
                     let l_then = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, &*condition);
+                    let var_cond = self.visit(symbol_table, condition);
 
                     self.emit(Instruction::CondJump {
                         cond: var_cond,
@@ -153,19 +153,19 @@ impl IRGenerator {
                         else_label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    self.visit(symbol_table, &*if_block);
+                    self.visit(symbol_table, if_block);
                     self.emit(Instruction::Label { name: l_end });
                     var = self.var_none.clone();
                 }
             }
             ExprKind::Block { expressions } => {
                 for expr in expressions {
-                    var = self.visit(symbol_table, &expr);
+                    var = self.visit(symbol_table, expr);
                 }
                 println!("Var: {var}, type: {:?}", self.var_types.get(&var));
             }
             ExprKind::Unary { operator, target } => {
-                let var_target = self.visit(symbol_table, &target);
+                let var_target = self.visit(symbol_table, target);
                 let var_result = self.new_var(expr.type_.clone());
                 self.emit(Instruction::Call {
                     fun: format!("unary_{}", operator),
@@ -175,8 +175,8 @@ impl IRGenerator {
                 var = var_result;
             }
             ExprKind::WhileDo {
-                condition,
-                do_block,
+                condition: _,
+                do_block: _,
             } => todo!(),
             ExprKind::None => var = self.var_none.clone(),
         };
