@@ -77,7 +77,7 @@ fn cli_tokenize(codefile: PathBuf) {
     for token in tokens {
         print!("{}, ", token);
     }
-    print!("\n");
+    println!();
 }
 
 fn cli_ast(codefile: PathBuf) {
@@ -88,7 +88,7 @@ fn cli_ast(codefile: PathBuf) {
     }
     let ast = ast_result.unwrap();
     print!("{:?}", ast);
-    print!("\n");
+    println!();
 }
 
 fn cli_typecheck(codefile: PathBuf) {
@@ -104,7 +104,7 @@ fn cli_typecheck(codefile: PathBuf) {
         std::process::exit(1);
     }
     print!("{:?}", ast);
-    print!("\n");
+    println!();
 }
 
 fn cli_compile(codefile: PathBuf, binfile: PathBuf) {
