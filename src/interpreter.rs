@@ -165,6 +165,7 @@ impl Interpreter {
             ExprKind::VarDeclaration { .. } => Value::None, // Declaration handled in BinOp =
             ExprKind::Unary { .. } => todo!(),
             ExprKind::WhileDo { .. } => todo!(),
+            ExprKind::Call { .. } => todo!(),
             ExprKind::None => Value::None,
         };
 

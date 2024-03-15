@@ -65,6 +65,7 @@ impl IRGenerator {
                 Type::None => {
                     var = self.var_none.clone();
                 }
+                Type::Func { .. } => todo!(),
             },
             ExprKind::Identifier { value } => {
                 var = symbol_table
@@ -200,6 +201,27 @@ impl IRGenerator {
 
                 var = self.var_none.clone();
             }
+            ExprKind::Call { func, params } => {
+                let ret_type = if let Type::Func {
+                    params: _,
+                    ret_type,
+                } = expr.type_.clone()
+                {
+                    *ret_type
+                } else {
+                    expr.type_.clone()
+                };
+                var = self.new_var(ret_type);
+                let mut args = Vec::new();
+                for param in params {
+                    args.push(self.visit(symbol_table, param));
+                }
+                self.emit(Instruction::Call {
+                    fun: func.to_string(),
+                    args,
+                    dest: var.clone(),
+                });
+            }
             ExprKind::None => var = self.var_none.clone(),
         };
         var
@@ -225,21 +247,32 @@ pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruct
         .expect("The final return variable does not exist!")
         .clone();
     let return_var = generator.new_var(Type::None);
+    if let Some(final_ins) = generate_final(final_result, final_type, return_var) {
+        generator.emit(final_ins);
+    }
+    generator.emit(Instruction::Return);
+    generator.instructions
+}
+
+fn generate_final(
+    final_result: String,
+    final_type: Type,
+    return_var: String,
+) -> Option<Instruction> {
     match final_type {
-        Type::Int => generator.emit(Instruction::Call {
+        Type::Int => Some(Instruction::Call {
             fun: "print_int".into(),
             args: vec![final_result],
             dest: return_var,
         }),
-        Type::Bool => generator.emit(Instruction::Call {
+        Type::Bool => Some(Instruction::Call {
             fun: "print_bool".into(),
             args: vec![final_result],
             dest: return_var,
         }),
-        Type::None => {}
+        Type::Func { ret_type, .. } => generate_final(final_result, *ret_type, return_var),
+        Type::None => None,
     }
-    generator.emit(Instruction::Return);
-    generator.instructions
 }
 
 #[cfg(test)]

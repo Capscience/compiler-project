@@ -15,9 +15,29 @@ impl Default for TypeChecker {
 
 impl TypeChecker {
     pub fn new() -> Self {
-        TypeChecker {
-            symbol_table: SymbolTable::new(None),
-        }
+        let mut symbol_table: SymbolTable<Type> = SymbolTable::new(None);
+        let _ = symbol_table.declare(
+            "read_int".to_string(),
+            Type::Func {
+                params: Vec::new(),
+                ret_type: Type::Int.into(),
+            },
+        );
+        let _ = symbol_table.declare(
+            "print_int".to_string(),
+            Type::Func {
+                params: vec![Type::Int],
+                ret_type: Type::None.into(),
+            },
+        );
+        let _ = symbol_table.declare(
+            "print_bool".to_string(),
+            Type::Func {
+                params: vec![Type::Bool],
+                ret_type: Type::None.into(),
+            },
+        );
+        TypeChecker { symbol_table }
     }
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, Box<dyn Error>> {
@@ -126,6 +146,15 @@ impl TypeChecker {
                         }
                         Type::Int
                     }
+                    "and" | "or" => {
+                        if !(matches!(&left, Type::Bool) && matches!(&right, Type::Bool)) {
+                            return Err(format!(
+                                "Both operands must be type `Bool` when using operator {operation}"
+                            )
+                            .into());
+                        }
+                        Type::Bool
+                    }
                     _ => {
                         if discriminant(&left) != discriminant(&right) {
                             return Err("Missmatched types!".into());
@@ -172,6 +201,30 @@ impl TypeChecker {
                 }
                 let _ = self.typecheck(do_block);
                 Type::None
+            }
+            ExprKind::Call { func, params } => {
+                let mut param_types = Vec::new();
+                for param in params {
+                    let type_result = self.typecheck(param);
+                    if type_result.is_err() {
+                        return type_result;
+                    }
+                    param_types.push(type_result.unwrap());
+                }
+                if let Some(Type::Func { params, ret_type }) = self.symbol_table.get(func) {
+                    for (param_type, should_be) in param_types.iter().zip(params) {
+                        if param_type != should_be {
+                            return Err(format!(
+                                "Function call expected type `{:?}`, got `{:?}`",
+                                should_be, param_type
+                            )
+                            .into());
+                        }
+                    }
+                    *ret_type.clone()
+                } else {
+                    return Err(format!("Undeclared function `{func}`").into());
+                }
             }
             ExprKind::None => Type::None,
         };

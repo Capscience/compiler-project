@@ -94,6 +94,56 @@ fn parse_expr(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String>
 }
 
 fn parse_binop(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
+    let mut left: Box<Expr> = parse_binop_and(iter)?;
+    while iter.peek().is_some() {
+        if !["or"].contains(
+            &iter
+                .peek()
+                .expect("Checked in while condition.")
+                .text
+                .as_str(),
+        ) {
+            break;
+        };
+
+        let operation = consume(iter, Some(vec!["or"])).expect("Should fail if None.");
+        let right = parse_polynomial(iter)?;
+        left = ExprKind::BinaryOperation {
+            left,
+            operation,
+            right,
+        }
+        .into();
+    }
+    Ok(left)
+}
+
+fn parse_binop_and(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
+    let mut left: Box<Expr> = parse_binop_comparison(iter)?;
+    while iter.peek().is_some() {
+        if !["and"].contains(
+            &iter
+                .peek()
+                .expect("Checked in while condition.")
+                .text
+                .as_str(),
+        ) {
+            break;
+        };
+
+        let operation = consume(iter, Some(vec!["and"])).expect("Should fail if None.");
+        let right = parse_polynomial(iter)?;
+        left = ExprKind::BinaryOperation {
+            left,
+            operation,
+            right,
+        }
+        .into();
+    }
+    Ok(left)
+}
+
+fn parse_binop_comparison(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     let mut left: Box<Expr> = parse_polynomial(iter)?;
     while iter.peek().is_some() {
         if !["<", ">", "<=", ">=", "==", "!="].contains(
@@ -279,6 +329,19 @@ fn parse_while(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String
     .into())
 }
 
+fn parse_call(iter: &mut Peekable<Iter<'_, Token>>, func: String) -> Result<Box<Expr>, String> {
+    let mut params = Vec::new();
+    consume(iter, Some(vec!["("]));
+    while consume(iter, Some(vec![")"])).is_none() {
+        if iter.peek().is_some() {
+            params.push(*parse_binop(iter)?);
+        } else {
+            return Err("Expected function parameters, found EOF!".to_string());
+        }
+    }
+    Ok(ExprKind::Call { func, params }.into())
+}
+
 fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
     let token = iter.peek().expect("Should never be None.");
     match token.tokentype {
@@ -300,10 +363,13 @@ fn parse_identifier(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, S
                 }
                 .into())
             } else {
-                Ok(ExprKind::Identifier {
-                    value: consume(iter, None).expect("Should fail if None."),
+                let text = consume(iter, None).expect("Should fail if None.");
+                if let Some(next) = iter.peek() {
+                    if next.text.as_str() == "(" {
+                        return parse_call(iter, text);
+                    }
                 }
-                .into())
+                Ok(ExprKind::Identifier { value: text }.into())
             }
         }
         _ => Err("Expected identifier".to_string()),
@@ -331,6 +397,90 @@ fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) ->
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_and() {
+        let expr = parse(&tokenize("true and true"));
+        assert_eq!(
+            expr.unwrap().first().expect("Parsing returned nothing!"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into(),
+                operation: "and".to_string(),
+                right: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_or() {
+        let expr = parse(&tokenize("true or true"));
+        assert_eq!(
+            expr.unwrap().first().expect("Parsing returned nothing!"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into(),
+                operation: "or".to_string(),
+                right: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_and_or() {
+        let expr = parse(&tokenize("true and true or true"));
+        assert_eq!(
+            expr.unwrap().first().expect("Parsing returned nothing!"),
+            &ExprKind::BinaryOperation {
+                left: ExprKind::BinaryOperation {
+                    left: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    operation: "and".to_string(),
+                    right: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                }
+                .into(),
+                operation: "or".to_string(),
+                right: ExprKind::Literal {
+                    value: "true".to_string()
+                }
+                .into()
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_function_call() {
+        let expr = parse(&tokenize("print_int(1)"));
+        assert_eq!(
+            expr.unwrap().first().expect("Parsing returned nothing!"),
+            &ExprKind::Call {
+                func: "print_int".to_string(),
+                params: vec![ExprKind::Literal {
+                    value: "1".to_string()
+                }
+                .into()]
+            }
+            .into()
+        );
+    }
 
     #[test]
     fn test_two_blocks_inside_block() {
@@ -381,7 +531,7 @@ mod tests {
         assert!(expr.is_ok());
     }
 
-    // #[test]
+    #[test]
     fn test_block_to_var_w_call_valid() {
         let expr = parse(&tokenize("x = { { f(a) } { b } }"));
         dbg!(&expr);
@@ -518,15 +668,12 @@ mod tests {
                 }
                 .into(),
                 do_block: ExprKind::Block {
-                    expressions: vec![
-                        ExprKind::BinaryOperation {
-                            left: ExprKind::Literal { value: "1".into() }.into(),
-                            operation: "+".into(),
-                            right: ExprKind::Literal { value: "1".into() }.into()
-                        }
-                        .into(),
-                        // ExprKind::None.into()
-                    ]
+                    expressions: vec![ExprKind::BinaryOperation {
+                        left: ExprKind::Literal { value: "1".into() }.into(),
+                        operation: "+".into(),
+                        right: ExprKind::Literal { value: "1".into() }.into()
+                    }
+                    .into(),]
                 }
                 .into()
             }

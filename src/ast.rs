@@ -33,6 +33,10 @@ pub enum Type {
     Int,
     Bool,
     None,
+    Func {
+        params: Vec<Type>,
+        ret_type: Box<Type>,
+    },
 }
 
 impl Default for Type {
@@ -73,6 +77,10 @@ pub enum ExprKind {
     WhileDo {
         condition: Box<Expr>,
         do_block: Box<Expr>,
+    },
+    Call {
+        func: String,
+        params: Vec<Expr>,
     },
     None,
 }
