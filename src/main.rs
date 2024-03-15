@@ -87,7 +87,7 @@ fn cli_ast(codefile: PathBuf) {
         eprint!("Parsing failed with error: {error}");
     }
     let ast = ast_result.unwrap();
-    print!("{:?}", ast);
+    print!("{:#?}", ast);
     println!();
 }
 
@@ -158,6 +158,8 @@ fn usage() {
     println!("Usage:");
     println!("\tcargo run -- <command> [args]\n");
     println!("Commands:");
+    println!("\ttokens <filename>");
+    println!("\tast <filename>");
     println!("\tinterpret");
     println!("\tir <filename>");
     println!("\tasm <filename>");
