@@ -89,21 +89,113 @@ impl IRGenerator {
                     }
                     _ => self.visit(symbol_table, left),
                 };
-                let var_right = self.visit(symbol_table, right);
-                if operation.as_str() == "=" {
-                    self.emit(Instruction::Copy {
-                        source: var_right.clone(),
-                        dest: var_left.clone(),
-                    });
-                    var = var_left;
-                } else {
-                    let var_result = self.new_var(expr.type_.clone());
-                    self.emit(Instruction::Call {
-                        fun: operation.to_string(),
-                        args: vec![var_left, var_right],
-                        dest: var_result.clone(),
-                    });
-                    var = var_result;
+                match operation.as_str() {
+                    "or" => {
+                        let or_right_label = self.new_label();
+                        let skip_or_label = self.new_label();
+                        let end_or_label = self.new_label();
+                        let var_result = self.new_var(Type::Bool);
+
+                        // Skip if left is true instruction
+                        self.emit(Instruction::CondJump {
+                            cond: var_left,
+                            then_label: skip_or_label.clone(),
+                            else_label: or_right_label.clone(),
+                        });
+
+                        // Left false, return value of right
+                        self.emit(Instruction::Label {
+                            name: or_right_label,
+                        });
+                        let var_right = self.visit(symbol_table, right);
+                        self.emit(Instruction::Copy {
+                            source: var_right,
+                            dest: var_result.clone(),
+                        });
+                        self.emit(Instruction::Jump {
+                            label: end_or_label.clone(),
+                        });
+
+                        // Skip or, aka return true
+                        self.emit(Instruction::Label {
+                            name: skip_or_label,
+                        });
+                        self.emit(Instruction::LoadBoolConst {
+                            value: true,
+                            dest: var_result.clone(),
+                        });
+                        // Optional jump to end?
+                        self.emit(Instruction::Jump {
+                            label: end_or_label.clone(),
+                        });
+
+                        // End of or
+                        self.emit(Instruction::Label { name: end_or_label });
+                        var = var_result;
+                    }
+                    "and" => {
+                        let and_right_label = self.new_label();
+                        let skip_and_label = self.new_label();
+                        let end_and_label = self.new_label();
+                        let var_result = self.new_var(Type::Bool);
+
+                        // Skip if left is false instruction
+                        self.emit(Instruction::CondJump {
+                            cond: var_left,
+                            then_label: and_right_label.clone(),
+                            else_label: skip_and_label.clone(),
+                        });
+
+                        // Left true, return value of right
+                        self.emit(Instruction::Label {
+                            name: and_right_label,
+                        });
+                        let var_right = self.visit(symbol_table, right);
+                        self.emit(Instruction::Copy {
+                            source: var_right,
+                            dest: var_result.clone(),
+                        });
+                        self.emit(Instruction::Jump {
+                            label: end_and_label.clone(),
+                        });
+
+                        // Skip and, aka return false
+                        self.emit(Instruction::Label {
+                            name: skip_and_label,
+                        });
+                        self.emit(Instruction::LoadBoolConst {
+                            value: false,
+                            dest: var_result.clone(),
+                        });
+                        // Optional jump to end?
+                        self.emit(Instruction::Jump {
+                            label: end_and_label.clone(),
+                        });
+
+                        // End of and
+                        self.emit(Instruction::Label {
+                            name: end_and_label,
+                        });
+                        var = var_result;
+                    }
+                    "=" => {
+                        let var_right = self.visit(symbol_table, right);
+                        self.emit(Instruction::Copy {
+                            source: var_right.clone(),
+                            dest: var_left.clone(),
+                        });
+                        var = var_left;
+                    }
+                    _ => {
+                        let var_right = self.visit(symbol_table, right);
+                        let var_result = self.new_var(expr.type_.clone());
+                        self.emit(Instruction::Call {
+                            fun: operation.to_string(),
+                            args: vec![var_left, var_right],
+                            dest: var_result.clone(),
+                        });
+                        var = var_result;
+                    }
                 }
             }
             ExprKind::VarDeclaration { .. } => {} // Handled in BinOp =
