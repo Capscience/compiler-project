@@ -64,15 +64,30 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
             }
             Instruction::Label { name } => emit(format!(".{name}:").as_str()),
             Instruction::Jump { label } => emit(format!("jmp .{label}").as_str()),
-            Instruction::LoadIntConst { value, dest } => emit(
-                format!(
-                    "movq ${value}, {}",
-                    locals
-                        .get_ref(dest.to_string())
-                        .expect("IR variable does not exist!")
-                )
-                .as_str(),
-            ),
+            Instruction::LoadIntConst { value, dest } => {
+                if -2_i64.pow(31) <= *value && *value < 2_i64.pow(31) {
+                    emit(
+                        format!(
+                            "movq ${value}, {}",
+                            locals
+                                .get_ref(dest.to_string())
+                                .expect("IR variable does not exist!")
+                        )
+                        .as_str(),
+                    );
+                } else {
+                    emit(format!("movabsq ${value}, %rax").as_str());
+                    emit(
+                        format!(
+                            "movq %rax, {}",
+                            locals
+                                .get_ref(dest.to_string())
+                                .expect("IR variable does not exist!")
+                        )
+                        .as_str(),
+                    )
+                }
+            }
             Instruction::LoadBoolConst { value, dest } => {
                 let value = if *value { 1 } else { 0 };
                 emit(
