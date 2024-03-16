@@ -31,3 +31,27 @@ if false then {
 }
 
 prints false
+
+---
+
+1 == 1
+
+prints true
+
+---
+
+1 != 1
+
+prints false
+
+---
+
+true == true
+
+prints true
+
+---
+
+false != false
+
+prints false
