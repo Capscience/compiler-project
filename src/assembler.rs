@@ -24,7 +24,19 @@ pub fn assemble(assembly: String, output_file: &Path) {
     if let Err(error) = stdlib_as_output {
         eprintln!("{}", error);
     } else {
-        println!("{:?}", stdlib_as_output.unwrap());
+        let output = stdlib_as_output.unwrap();
+        if !output.stdout.is_empty() {
+            println!(
+                "{}",
+                String::from_utf8(output.stdout).expect("Failed to convert as command output!")
+            );
+        }
+        if !output.stderr.is_empty() {
+            eprintln!(
+                "{}",
+                String::from_utf8(output.stderr).expect("Failed to convert as command output!")
+            );
+        }
     }
 
     let program_as_output = Command::new("as")
@@ -36,7 +48,19 @@ pub fn assemble(assembly: String, output_file: &Path) {
     if let Err(error) = program_as_output {
         eprintln!("{}", error);
     } else {
-        println!("{:?}", program_as_output.unwrap());
+        let output = program_as_output.unwrap();
+        if !output.stdout.is_empty() {
+            println!(
+                "{}",
+                String::from_utf8(output.stdout).expect("Failed to convert as command output!")
+            );
+        }
+        if !output.stderr.is_empty() {
+            eprintln!(
+                "{}",
+                String::from_utf8(output.stderr).expect("Failed to convert as command output!")
+            );
+        }
     }
 
     let linker_output = Command::new("ld")
@@ -49,7 +73,19 @@ pub fn assemble(assembly: String, output_file: &Path) {
     if let Err(error) = linker_output {
         eprintln!("{}", error);
     } else {
-        println!("{:?}", linker_output.unwrap());
+        let output = linker_output.unwrap();
+        if !output.stdout.is_empty() {
+            println!(
+                "{}",
+                String::from_utf8(output.stdout).expect("Failed to convert as command output!")
+            );
+        }
+        if !output.stderr.is_empty() {
+            eprintln!(
+                "{}",
+                String::from_utf8(output.stderr).expect("Failed to convert as command output!")
+            );
+        }
     }
 
     // Remove temporary files

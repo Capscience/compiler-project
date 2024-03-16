@@ -112,7 +112,10 @@ fn cli_typecheck(codefile: PathBuf) {
 
 fn cli_compile(codefile: PathBuf, binfile: PathBuf) {
     let code = fs::read_to_string(codefile).expect("Codefile not found!");
-    compiler_project::compile(code, &binfile);
+    if let Err(error) = compiler_project::compile(code, &binfile) {
+        eprint!("{}", error);
+        std::process::exit(1);
+    }
 }
 
 fn ir_gen(filename: PathBuf) {

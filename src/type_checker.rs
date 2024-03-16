@@ -1,6 +1,5 @@
 use crate::ast::{Expr, ExprKind, Type};
 use crate::variable::SymbolTable;
-use std::error::Error;
 use std::mem::discriminant;
 
 pub struct TypeChecker {
@@ -40,7 +39,7 @@ impl TypeChecker {
         TypeChecker { symbol_table }
     }
 
-    pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, Box<dyn Error>> {
+    pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
             ExprKind::Literal { value } => {
                 if value.parse::<bool>().is_ok() {
