@@ -41,6 +41,7 @@ impl TypeChecker {
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
+            ExprKind::FunDef { .. } => todo!(),
             ExprKind::Literal { value } => {
                 if value.parse::<bool>().is_ok() {
                     Type::Bool
@@ -127,7 +128,20 @@ impl TypeChecker {
                         self.symbol_table.set(var_name.clone(), right.clone())?;
                         right
                     }
-                    "<" | ">" | "==" | ">=" | "<=" | "!=" => {
+                    "==" | "!=" => {
+                        if !(matches!(&left, Type::Int) || matches!(&left, Type::Bool)) {
+                            return Err(format!(
+                                "Operator {operation} is only implemented for Int and Bool types!"
+                            ));
+                        }
+                        if discriminant(&left) != discriminant(&right) {
+                            return Err(format!(
+                                "Both operands must be same type for operator {operation}!"
+                            ));
+                        }
+                        Type::Bool
+                    }
+                    "<" | ">" | ">=" | "<=" => {
                         if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
                             return Err(
                                 "Both operands must be type `Int` when using comparison".into()

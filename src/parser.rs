@@ -1,18 +1,20 @@
-use crate::ast::{Expr, ExprKind, Type};
+use crate::ast::{Expr, ExprKind, Module, Type};
 use crate::tokenizer::{Token, TokenType};
 use std::iter::Peekable;
-use std::slice::Iter;
+use std::vec::IntoIter;
+
+struct Parser {
+    iter: Box<Peekable<IntoIter<Token>>>,
+    module: Module,
+}
+
+pub fn parse_module(_tokens: &[Token]) -> Result<Module, String> {
+    Err("Not implemented yet!".to_string())
+}
 
 pub fn parse(tokens: &[Token]) -> Result<Expr, String> {
-    let tokens = preprocess_tokens(tokens);
-    let mut iter = tokens.iter().peekable();
-    let block = *parse_block(&mut iter)?;
-
-    if iter.peek().is_some() {
-        Err(format!("Expected EOF, got {:?}", consume(&mut iter, None)).to_string())
-    } else {
-        Ok(block)
-    }
+    let mut parser = Parser::new(tokens);
+    parser.parse()
 }
 
 /// Add optional ; after a block where needed
@@ -40,383 +42,427 @@ fn preprocess_tokens(tokens: &[Token]) -> Vec<Token> {
     new_tokens
 }
 
-fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut block = ExprKind::Block {
-        expressions: Vec::new(),
-    };
+impl Parser {
+    pub fn new(tokens: &[Token]) -> Self {
+        let tokens: Vec<Token> = preprocess_tokens(tokens);
+        let iter = tokens.into_iter().peekable();
+        Self {
+            iter: Box::new(iter),
+            module: Module::new(),
+        }
+    }
+    pub fn parse(&mut self) -> Result<Expr, String> {
+        let block = *self.parse_block()?;
 
-    while iter.peek().is_some() {
-        let next = iter.peek().expect("Checked on previous line.");
-        // Handle block end and `;` between expressions in the block.
-        match next.text.as_str() {
-            "}" => {
-                consume(iter, Some(vec!["}"]));
+        if self.iter.peek().is_some() {
+            Err(format!("Expected EOF, got {:?}", self.consume(None)).to_string())
+        } else {
+            Ok(block)
+        }
+    }
+
+    fn parse_block(&mut self) -> Result<Box<Expr>, String> {
+        let mut block = ExprKind::Block {
+            expressions: Vec::new(),
+        };
+
+        while self.iter.peek().is_some() {
+            let next = self.iter.peek().expect("Checked on previous line.");
+            // Handle block end and `;` between expressions in the block.
+            match next.text.as_str() {
+                "}" => {
+                    self.consume(Some(vec!["}"]));
+                    break;
+                }
+                ";" => {
+                    self.consume(Some(vec![";"]));
+                    block.push(ExprKind::None.into());
+                }
+                _ => {
+                    let expressions = block.expressions().expect("Should be block");
+                    if expressions.is_empty()
+                        || matches!(
+                            expressions.last(),
+                            Some(Expr {
+                                content: ExprKind::None,
+                                type_: Type::None
+                            })
+                        )
+                        || matches!(
+                            expressions.last(),
+                            Some(Expr {
+                                content: ExprKind::Block { .. },
+                                type_: Type::None
+                            })
+                        )
+                    {
+                        if next.text.as_str() == "{" {
+                            self.consume(Some(vec!["{"]));
+                            block.push(*self.parse_block()?);
+                            if let Some(next) = self.iter.peek() {
+                                if next.text.as_str() == "}" {
+                                    self.consume(Some(vec!["}"]));
+                                    break;
+                                }
+                            }
+                            block.push(ExprKind::None.into());
+                        } else {
+                            block.push(*self.parse_expr()?);
+                        }
+                    } else {
+                        dbg!(&block);
+                        return Err(format!("Expected semicolon, got {:?}", next));
+                    }
+                }
+            }
+        }
+        if block.get_first().is_none() {
+            return Err("Expected expression, found nothing".to_string());
+        }
+        Ok(block.into())
+    }
+
+    fn parse_expr(&mut self) -> Result<Box<Expr>, String> {
+        let mut left = self.parse_binop()?;
+        while self.iter.peek().is_some() {
+            if self
+                .iter
+                .peek()
+                .expect("Checked on previous line")
+                .text
+                .as_str()
+                != "="
+            {
                 break;
             }
-            ";" => {
-                consume(iter, Some(vec![";"]));
-                block.push(ExprKind::None.into());
+            let operation = self
+                .consume(Some(vec!["="]))
+                .expect("Checked on previous if statement");
+            let right = self.parse_binop()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
             }
-            _ => {
-                let expressions = block.expressions().expect("Should be block");
-                if expressions.is_empty()
-                    || matches!(
-                        expressions.last(),
-                        Some(Expr {
-                            content: ExprKind::None,
-                            type_: Type::None
-                        })
-                    )
-                    || matches!(
-                        expressions.last(),
-                        Some(Expr {
-                            content: ExprKind::Block { .. },
-                            type_: Type::None
-                        })
-                    )
-                {
-                    if next.text.as_str() == "{" {
-                        consume(iter, Some(vec!["{"]));
-                        block.push(*parse_block(iter)?);
-                        if let Some(next) = iter.peek() {
-                            if next.text.as_str() == "}" {
-                                consume(iter, Some(vec!["}"]));
-                                break;
-                            }
-                        }
-                        block.push(ExprKind::None.into());
-                    } else {
-                        block.push(*parse_expr(iter)?);
-                    }
-                } else {
-                    dbg!(&block);
-                    return Err(format!("Expected semicolon, got {:?}", next));
-                }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_binop(&mut self) -> Result<Box<Expr>, String> {
+        let mut left: Box<Expr> = self.parse_binop_and()?;
+        while self.iter.peek().is_some() {
+            if !["or"].contains(
+                &self
+                    .iter
+                    .peek()
+                    .expect("Checked in while condition.")
+                    .text
+                    .as_str(),
+            ) {
+                break;
+            };
+
+            let operation = self
+                .consume(Some(vec!["or"]))
+                .expect("Should fail if None.");
+            let right = self.parse_polynomial()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
+            }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_binop_and(&mut self) -> Result<Box<Expr>, String> {
+        let mut left: Box<Expr> = self.parse_binop_comparison()?;
+        while self.iter.peek().is_some() {
+            if !["and"].contains(
+                &self
+                    .iter
+                    .peek()
+                    .expect("Checked in while condition.")
+                    .text
+                    .as_str(),
+            ) {
+                break;
+            };
+
+            let operation = self
+                .consume(Some(vec!["and"]))
+                .expect("Should fail if None.");
+            let right = self.parse_polynomial()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
+            }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_binop_comparison(&mut self) -> Result<Box<Expr>, String> {
+        let mut left: Box<Expr> = self.parse_polynomial()?;
+        while self.iter.peek().is_some() {
+            if !["<", ">", "<=", ">=", "==", "!="].contains(
+                &self
+                    .iter
+                    .peek()
+                    .expect("Checked in while condition.")
+                    .text
+                    .as_str(),
+            ) {
+                break;
+            };
+
+            let operation = self
+                .consume(Some(vec!["<", ">", "<=", ">=", "==", "!="]))
+                .expect("Should fail if None.");
+            let right = self.parse_polynomial()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
+            }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_polynomial(&mut self) -> Result<Box<Expr>, String> {
+        let mut left: Box<Expr> = self.parse_term()?;
+        while self.iter.peek().is_some() {
+            if !["+", "-"].contains(
+                &self
+                    .iter
+                    .peek()
+                    .expect("Checked in while condition.")
+                    .text
+                    .as_str(),
+            ) {
+                break;
+            };
+
+            let operation = self
+                .consume(Some(vec!["+", "-"]))
+                .expect("Should fail if None.");
+            let right = self.parse_term()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
+            }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_term(&mut self) -> Result<Box<Expr>, String> {
+        let mut left = self.parse_factor()?;
+        while self.iter.peek().is_some() {
+            if !["*", "/", "%"].contains(
+                &self
+                    .iter
+                    .peek()
+                    .expect("Checked in while condition.")
+                    .text
+                    .as_str(),
+            ) {
+                break;
+            };
+
+            let operation = self
+                .consume(Some(vec!["*", "/", "%"]))
+                .expect("Should fail if None.");
+            let right = self.parse_factor()?;
+            left = ExprKind::BinaryOperation {
+                left,
+                operation,
+                right,
+            }
+            .into();
+        }
+        Ok(left)
+    }
+
+    fn parse_factor(&mut self) -> Result<Box<Expr>, String> {
+        if self.iter.peek().is_none() {
+            return Err("No more tokens to read".to_string());
+        }
+        let token = self.iter.peek().expect("Should never be None.");
+        match token.text.as_str() {
+            "(" => return self.parse_parenthesized(),
+            "{" => {
+                self.consume(Some(vec!["{"]));
+                return self.parse_block();
+            }
+            "if" => return self.parse_if_expression(),
+            "var" => return self.parse_var_declaration(),
+            "while" => return self.parse_while(),
+            "-" | "not" => return self.parse_unary(),
+            _ => {} // Continue according to token type
+        }
+
+        match token.tokentype {
+            TokenType::IntLiteral => self.parse_int_literal(),
+            TokenType::Identifier => self.parse_identifier(),
+            _ => Err(format!("Expected IntLiteral, got {:?}", token.text)),
+        }
+    }
+
+    fn parse_unary(&mut self) -> Result<Box<Expr>, String> {
+        let operator = self
+            .consume(Some(vec!["-", "not"]))
+            .expect("Tried to parse unary without having an unary operator next!");
+        let target = self.parse_factor()?;
+        Ok(ExprKind::Unary { operator, target }.into())
+    }
+
+    fn parse_parenthesized(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["("]));
+        let expression = self.parse_binop()?;
+        self.consume(Some(vec![")"]));
+        Ok(expression)
+    }
+
+    fn parse_if_expression(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["if"]));
+        let condition = self.parse_binop()?;
+        self.consume(Some(vec!["then"]));
+        let if_block = self.parse_expr()?;
+
+        // Optional else block
+        let mut else_block = None;
+        if let Some(next) = self.iter.peek() {
+            if next.text == "else" {
+                self.consume(Some(vec!["else"]));
+                else_block = Some(self.parse_expr()?);
             }
         }
-    }
-    if block.get_first().is_none() {
-        return Err("Expected expression, found nothing".to_string());
-    }
-    Ok(block.into())
-}
 
-fn parse_expr(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left = parse_binop(iter)?;
-    while iter.peek().is_some() {
-        if iter.peek().expect("Checked on previous line").text.as_str() != "=" {
-            break;
-        }
-        let operation = consume(iter, Some(vec!["="])).expect("Checked on previous if statement");
-        let right = parse_binop(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_binop(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left: Box<Expr> = parse_binop_and(iter)?;
-    while iter.peek().is_some() {
-        if !["or"].contains(
-            &iter
-                .peek()
-                .expect("Checked in while condition.")
-                .text
-                .as_str(),
-        ) {
-            break;
-        };
-
-        let operation = consume(iter, Some(vec!["or"])).expect("Should fail if None.");
-        let right = parse_polynomial(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_binop_and(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left: Box<Expr> = parse_binop_comparison(iter)?;
-    while iter.peek().is_some() {
-        if !["and"].contains(
-            &iter
-                .peek()
-                .expect("Checked in while condition.")
-                .text
-                .as_str(),
-        ) {
-            break;
-        };
-
-        let operation = consume(iter, Some(vec!["and"])).expect("Should fail if None.");
-        let right = parse_polynomial(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_binop_comparison(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left: Box<Expr> = parse_polynomial(iter)?;
-    while iter.peek().is_some() {
-        if !["<", ">", "<=", ">=", "==", "!="].contains(
-            &iter
-                .peek()
-                .expect("Checked in while condition.")
-                .text
-                .as_str(),
-        ) {
-            break;
-        };
-
-        let operation = consume(iter, Some(vec!["<", ">", "<=", ">=", "==", "!="]))
-            .expect("Should fail if None.");
-        let right = parse_polynomial(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_polynomial(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left: Box<Expr> = parse_term(iter)?;
-    while iter.peek().is_some() {
-        if !["+", "-"].contains(
-            &iter
-                .peek()
-                .expect("Checked in while condition.")
-                .text
-                .as_str(),
-        ) {
-            break;
-        };
-
-        let operation = consume(iter, Some(vec!["+", "-"])).expect("Should fail if None.");
-        let right = parse_term(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_term(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let mut left = parse_factor(iter)?;
-    while iter.peek().is_some() {
-        if !["*", "/", "%"].contains(
-            &iter
-                .peek()
-                .expect("Checked in while condition.")
-                .text
-                .as_str(),
-        ) {
-            break;
-        };
-
-        let operation = consume(iter, Some(vec!["*", "/", "%"])).expect("Should fail if None.");
-        let right = parse_factor(iter)?;
-        left = ExprKind::BinaryOperation {
-            left,
-            operation,
-            right,
-        }
-        .into();
-    }
-    Ok(left)
-}
-
-fn parse_factor(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    if iter.peek().is_none() {
-        return Err("No more tokens to read".to_string());
-    }
-    let token = iter.peek().expect("Should never be None.");
-    match token.text.as_str() {
-        "(" => return parse_parenthesized(iter),
-        "{" => {
-            consume(iter, Some(vec!["{"]));
-            return parse_block(iter);
-        }
-        "if" => return parse_if_expression(iter),
-        "var" => return parse_var_declaration(iter),
-        "while" => return parse_while(iter),
-        "-" | "not" => return parse_unary(iter),
-        _ => {} // Continue according to token type
-    }
-
-    match token.tokentype {
-        TokenType::IntLiteral => parse_int_literal(iter),
-        TokenType::Identifier => parse_identifier(iter),
-        _ => Err(format!("Expected IntLiteral, got {:?}", token.text)),
-    }
-}
-
-fn parse_unary(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let operator = consume(iter, Some(vec!["-", "not"]))
-        .expect("Tried to parse unary without having an unary operator next!");
-    let target = parse_factor(iter)?;
-    Ok(ExprKind::Unary { operator, target }.into())
-}
-
-fn parse_parenthesized(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    consume(iter, Some(vec!["("]));
-    let expression = parse_binop(iter)?;
-    consume(iter, Some(vec![")"]));
-    Ok(expression)
-}
-
-fn parse_if_expression(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    consume(iter, Some(vec!["if"]));
-    let condition = parse_binop(iter)?;
-    consume(iter, Some(vec!["then"]));
-    let if_block = parse_expr(iter)?;
-
-    // Optional else block
-    let mut else_block = None;
-    if let Some(next) = iter.peek() {
-        if next.text == "else" {
-            consume(iter, Some(vec!["else"]));
-            else_block = Some(parse_expr(iter)?);
-        }
-    }
-
-    Ok(ExprKind::IfClause {
-        condition,
-        if_block,
-        else_block,
-    }
-    .into())
-}
-
-fn parse_var_declaration(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    consume(iter, Some(vec!["var"]));
-    let identifier = parse_identifier(iter)?;
-
-    let annotated_type = if consume(iter, Some(vec![":"])).is_some() {
-        Some(consume(iter, None).ok_or("Type annotation empty!")?)
-    } else {
-        None
-    };
-
-    if consume(iter, Some(vec!["="])).is_none() {
-        return Err("Expected type annotation or assignment!".to_string());
-    }
-
-    let right = parse_binop(iter)?;
-
-    if let ExprKind::Identifier { value } = identifier.content {
-        Ok(ExprKind::BinaryOperation {
-            left: ExprKind::VarDeclaration {
-                identifier: value,
-                annotated_type,
-            }
-            .into(),
-            operation: "=".to_string(),
-            right,
+        Ok(ExprKind::IfClause {
+            condition,
+            if_block,
+            else_block,
         }
         .into())
-    } else {
-        Err(format!("Expected identifier, got {:?}", *identifier))
     }
-}
 
-fn parse_while(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    consume(iter, Some(vec!["while"]));
-    let condition = parse_binop(iter)?;
-    consume(iter, Some(vec!["do"]));
-    let peek = iter.peek();
-    if peek.is_none() {
-        return Err("Expected expression, found nothing.".into());
-    }
-    let do_block = parse_expr(iter)?;
-    Ok(ExprKind::WhileDo {
-        condition,
-        do_block,
-    }
-    .into())
-}
+    fn parse_var_declaration(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["var"]));
+        let identifier = self.parse_identifier()?;
 
-fn parse_call(iter: &mut Peekable<Iter<'_, Token>>, func: String) -> Result<Box<Expr>, String> {
-    let mut params = Vec::new();
-    consume(iter, Some(vec!["("]));
-    while consume(iter, Some(vec![")"])).is_none() {
-        if iter.peek().is_some() {
-            params.push(*parse_binop(iter)?);
+        let annotated_type = if self.consume(Some(vec![":"])).is_some() {
+            Some(self.consume(None).ok_or("Type annotation empty!")?)
         } else {
-            return Err("Expected function parameters, found EOF!".to_string());
-        }
-    }
-    Ok(ExprKind::Call { func, params }.into())
-}
+            None
+        };
 
-fn parse_int_literal(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let token = iter.peek().expect("Should never be None.");
-    match token.tokentype {
-        TokenType::IntLiteral => Ok(ExprKind::Literal {
-            value: consume(iter, None).expect("Should fail if None."),
+        if self.consume(Some(vec!["="])).is_none() {
+            return Err("Expected type annotation or assignment!".to_string());
         }
-        .into()),
-        _ => Err("Expected IntLiteral".to_string()),
-    }
-}
 
-fn parse_identifier(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
-    let token = iter.peek().expect("Should never be None.");
-    match token.tokentype {
-        TokenType::Identifier => {
-            if ["true", "false"].contains(&token.text.as_str()) {
-                Ok(ExprKind::Literal {
-                    value: consume(iter, None).expect("Should fail if None."),
+        let right = self.parse_binop()?;
+
+        if let ExprKind::Identifier { value } = identifier.content {
+            Ok(ExprKind::BinaryOperation {
+                left: ExprKind::VarDeclaration {
+                    identifier: value,
+                    annotated_type,
                 }
-                .into())
+                .into(),
+                operation: "=".to_string(),
+                right,
+            }
+            .into())
+        } else {
+            Err(format!("Expected identifier, got {:?}", *identifier))
+        }
+    }
+
+    fn parse_while(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["while"]));
+        let condition = self.parse_binop()?;
+        self.consume(Some(vec!["do"]));
+        let peek = self.iter.peek();
+        if peek.is_none() {
+            return Err("Expected expression, found nothing.".into());
+        }
+        let do_block = self.parse_expr()?;
+        Ok(ExprKind::WhileDo {
+            condition,
+            do_block,
+        }
+        .into())
+    }
+
+    fn parse_call(&mut self, func: String) -> Result<Box<Expr>, String> {
+        let mut params = Vec::new();
+        self.consume(Some(vec!["("]));
+        while self.consume(Some(vec![")"])).is_none() {
+            if self.iter.peek().is_some() {
+                params.push(*self.parse_binop()?);
             } else {
-                let text = consume(iter, None).expect("Should fail if None.");
-                if let Some(next) = iter.peek() {
-                    if next.text.as_str() == "(" {
-                        return parse_call(iter, text);
+                return Err("Expected function parameters, found EOF!".to_string());
+            }
+        }
+        Ok(ExprKind::Call { func, params }.into())
+    }
+
+    fn parse_int_literal(&mut self) -> Result<Box<Expr>, String> {
+        let token = self.iter.peek().expect("Should never be None.");
+        match token.tokentype {
+            TokenType::IntLiteral => Ok(ExprKind::Literal {
+                value: self.consume(None).expect("Should fail if None."),
+            }
+            .into()),
+            _ => Err("Expected IntLiteral".to_string()),
+        }
+    }
+
+    fn parse_identifier(&mut self) -> Result<Box<Expr>, String> {
+        let token = self.iter.peek().expect("Should never be None.");
+        match token.tokentype {
+            TokenType::Identifier => {
+                if ["true", "false"].contains(&token.text.as_str()) {
+                    Ok(ExprKind::Literal {
+                        value: self.consume(None).expect("Should fail if None."),
+                    }
+                    .into())
+                } else {
+                    let text = self.consume(None).expect("Should fail if None.");
+                    if let Some(next) = self.iter.peek() {
+                        if next.text.as_str() == "(" {
+                            return self.parse_call(text);
+                        }
+                    }
+                    Ok(ExprKind::Identifier { value: text }.into())
+                }
+            }
+            _ => Err("Expected identifier".to_string()),
+        }
+    }
+
+    fn consume(&mut self, expected: Option<Vec<&str>>) -> Option<String> {
+        if let Some(token) = self.iter.peek() {
+            if let Some(expected) = expected {
+                for text in expected {
+                    if text == token.text {
+                        let token = self.iter.next()?;
+                        return Some(token.text.clone());
                     }
                 }
-                Ok(ExprKind::Identifier { value: text }.into())
+            } else {
+                let token = self.iter.next().expect("peek() is Some");
+                return Some(token.text.clone());
             }
         }
-        _ => Err("Expected identifier".to_string()),
+        None
     }
-}
-
-fn consume(iter: &mut Peekable<Iter<'_, Token>>, expected: Option<Vec<&str>>) -> Option<String> {
-    if let Some(token) = iter.peek() {
-        if let Some(expected) = expected {
-            for text in expected {
-                if text == token.text {
-                    let token = iter.next()?;
-                    return Some(token.text.clone());
-                }
-            }
-        } else {
-            let token = iter.next().expect("peek() is Some");
-            return Some(token.text.clone());
-        }
-    }
-    None
 }
 
 #[cfg(test)]

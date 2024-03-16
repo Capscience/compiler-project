@@ -1,3 +1,13 @@
+pub struct Module {
+    exprs: Vec<Expr>,
+}
+
+impl Module {
+    pub fn new() -> Self {
+        Self { exprs: Vec::new() }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Expr {
     pub content: ExprKind,
@@ -81,6 +91,13 @@ pub enum ExprKind {
     Call {
         func: String,
         params: Vec<Expr>,
+    },
+    FunDef {
+        name: String,
+        params: Vec<String>,
+        param_types: Vec<String>,
+        return_type: Option<String>,
+        block: Box<Expr>,
     },
     None,
 }
