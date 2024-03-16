@@ -4,6 +4,7 @@ use std::iter::Peekable;
 use std::slice::Iter;
 
 pub fn parse(tokens: &[Token]) -> Result<Expr, String> {
+    let tokens = preprocess_tokens(tokens);
     let mut iter = tokens.iter().peekable();
     let block = *parse_block(&mut iter)?;
 
@@ -12,6 +13,31 @@ pub fn parse(tokens: &[Token]) -> Result<Expr, String> {
     } else {
         Ok(block)
     }
+}
+
+/// Add optional ; after a block where needed
+fn preprocess_tokens(tokens: &[Token]) -> Vec<Token> {
+    let mut new_tokens = Vec::new();
+    let mut previous = Token {
+        text: "".to_string(),
+        tokentype: TokenType::Comment,
+        range: None,
+    };
+    for token in tokens {
+        if previous.text.as_str() == "}"
+            && token.text.as_str() != "}"
+            && token.text.as_str() != "else"
+        {
+            new_tokens.push(Token {
+                text: ";".to_string(),
+                tokentype: TokenType::Delimiter,
+                range: None,
+            });
+        }
+        new_tokens.push(token.clone());
+        previous = token.clone();
+    }
+    new_tokens
 }
 
 fn parse_block(iter: &mut Peekable<Iter<'_, Token>>) -> Result<Box<Expr>, String> {
