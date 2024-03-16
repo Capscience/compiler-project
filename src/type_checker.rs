@@ -47,7 +47,7 @@ impl TypeChecker {
                 } else if value.parse::<i64>().is_ok() {
                     Type::Int
                 } else {
-                    return Err(format!("Invalid literal '{value}'").into());
+                    return Err(format!("Invalid literal '{value}'"));
                 }
             }
             ExprKind::Identifier { value } => {
@@ -55,7 +55,7 @@ impl TypeChecker {
                 if let Some(val) = identifier_value {
                     val.clone()
                 } else {
-                    return Err(format!("Use of undeclared variable '{}'", value).into());
+                    return Err(format!("Use of undeclared variable '{}'", value));
                 }
             }
             ExprKind::IfClause {
@@ -109,8 +109,7 @@ impl TypeChecker {
                                             return Err(format!(
                                                 "Invalid type annotation `{}`",
                                                 var_type
-                                            )
-                                            .into())
+                                            ))
                                         }
                                     };
                                     identifier
@@ -140,8 +139,7 @@ impl TypeChecker {
                         if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
                             return Err(format!(
                                 "Both operands must be type `Int` when using operator {operation}"
-                            )
-                            .into());
+                            ));
                         }
                         Type::Int
                     }
@@ -149,8 +147,7 @@ impl TypeChecker {
                         if !(matches!(&left, Type::Bool) && matches!(&right, Type::Bool)) {
                             return Err(format!(
                                 "Both operands must be type `Bool` when using operator {operation}"
-                            )
-                            .into());
+                            ));
                         }
                         Type::Bool
                     }
@@ -187,8 +184,7 @@ impl TypeChecker {
                     return Err(format!(
                         "Invalid unary operator `{}` for type `{:?}`",
                         operator, target_type
-                    )
-                    .into());
+                    ));
                 }
             }
             ExprKind::WhileDo {
@@ -205,9 +201,7 @@ impl TypeChecker {
                 let mut param_types = Vec::new();
                 for param in params {
                     let type_result = self.typecheck(param);
-                    if type_result.is_err() {
-                        return type_result;
-                    }
+                    type_result.as_ref()?;
                     param_types.push(type_result.unwrap());
                 }
                 if let Some(Type::Func { params, ret_type }) = self.symbol_table.get(func) {
@@ -216,13 +210,12 @@ impl TypeChecker {
                             return Err(format!(
                                 "Function call expected type `{:?}`, got `{:?}`",
                                 should_be, param_type
-                            )
-                            .into());
+                            ));
                         }
                     }
                     *ret_type.clone()
                 } else {
-                    return Err(format!("Undeclared function `{func}`").into());
+                    return Err(format!("Undeclared function `{func}`"));
                 }
             }
             ExprKind::None => Type::None,

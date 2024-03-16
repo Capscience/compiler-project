@@ -100,7 +100,10 @@ impl E2ETests {
             }
         }
 
-        compile(code, &Path::new("test.out"));
+        if compile(code, &Path::new("test.out")).is_err() {
+            return Err(path.to_path_buf());
+        }
+
         let mut program = Command::new("./test.out")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

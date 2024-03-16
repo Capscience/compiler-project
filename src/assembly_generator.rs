@@ -65,7 +65,7 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
             Instruction::Label { name } => emit(format!(".{name}:").as_str()),
             Instruction::Jump { label } => emit(format!("jmp .{label}").as_str()),
             Instruction::LoadIntConst { value, dest } => {
-                if -2_i64.pow(31) <= *value && *value < 2_i64.pow(31) {
+                if -(2_i64.pow(31)) <= *value && *value < 2_i64.pow(31) {
                     emit(
                         format!(
                             "movq ${value}, {}",
