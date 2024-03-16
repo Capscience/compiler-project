@@ -156,54 +156,54 @@ pub fn generate_assembly(instructions: &[Instruction]) -> String {
 
 fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String {
     let mut lines = Vec::new();
-    let mut emit = |line: &str| {
-        lines.push(line.to_string());
+    let mut emit = |line: String| {
+        lines.push(line);
     };
     let mut emit_comparison = |setcc_instruction: &str| {
-        emit("xor %rax, %rax");
-        emit(format!("movq {}, %rdx", arg_refs[0]).as_str());
-        emit(format!("cmpq {}, %rdx", arg_refs[1]).as_str());
-        emit(format!("{} %al", setcc_instruction).as_str());
-        emit(format!("movq %rax, {}", dest_ref).as_str());
+        emit("xor %rax, %rax".to_string());
+        emit(format!("movq {}, %rdx", arg_refs[0]));
+        emit(format!("cmpq {}, %rdx", arg_refs[1]));
+        emit(format!("{} %al", setcc_instruction));
+        emit(format!("movq %rax, {}", dest_ref));
     };
 
     match fun.as_str() {
         "unary_-" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit("negq %rax");
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit("negq %rax".to_string());
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "unary_not" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit("xorq $1, %rax");
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit("xorq $1, %rax".to_string());
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "+" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit(format!("addq {}, %rax", arg_refs[1]).as_str());
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit(format!("addq {}, %rax", arg_refs[1]));
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "-" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit(format!("subq {}, %rax", arg_refs[1]).as_str());
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit(format!("subq {}, %rax", arg_refs[1]));
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "*" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit(format!("imulq {}, %rax", arg_refs[1]).as_str());
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit(format!("imulq {}, %rax", arg_refs[1]));
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "/" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit("cqto");
-            emit(format!("idivq {}", arg_refs[1]).as_str());
-            emit(format!("movq %rax, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit("cqto".to_string());
+            emit(format!("idivq {}", arg_refs[1]));
+            emit(format!("movq %rax, {}", dest_ref));
         }
         "%" => {
-            emit(format!("movq {}, %rax", arg_refs[0]).as_str());
-            emit("cqto");
-            emit(format!("idivq {}", arg_refs[1]).as_str());
-            emit(format!("movq %rdx, {}", dest_ref).as_str());
+            emit(format!("movq {}, %rax", arg_refs[0]));
+            emit("cqto".to_string());
+            emit(format!("idivq {}", arg_refs[1]));
+            emit(format!("movq %rdx, {}", dest_ref));
         }
         "==" => emit_comparison("sete"),
         "!=" => emit_comparison("setne"),
@@ -213,10 +213,10 @@ fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String
         ">=" => emit_comparison("setge"),
         _ => {
             for (i, arg_ref) in arg_refs.iter().enumerate() {
-                emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]).as_str())
+                emit(format!("movq {}, {}", arg_ref, PARAM_REGISTERS[i]))
             }
-            emit(format!("callq {fun}").as_str());
-            emit(format!("movq %rax, {dest_ref}").as_str());
+            emit(format!("callq {fun}"));
+            emit(format!("movq %rax, {dest_ref}"));
         }
     }
     lines.join("\n")

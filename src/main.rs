@@ -9,7 +9,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     match args.len() {
         2 => match args[1].as_str() {
-            "interpret" => interpreter_cli(),
+            "interpret" => cli_interactive_interpret(),
             _ => {
                 usage();
                 std::process::exit(1);
@@ -41,8 +41,11 @@ fn main() {
     }
 }
 
-fn interpreter_cli() {
-    println!("Limited functionality for now. Exit with Ctlr+C");
+fn cli_interactive_interpret() {
+    println!();
+    println!("The interpreter does not support the complete base language!");
+    println!();
+    println!("Exit with Ctlr+C");
     let mut interpreter = Interpreter::new();
     let mut line = String::new();
     loop {

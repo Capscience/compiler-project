@@ -1,36 +1,33 @@
 use std::vec;
 
-pub type IRVar = String;
-pub type Label = String;
-
 pub enum Instruction {
     LoadBoolConst {
         value: bool,
-        dest: IRVar,
+        dest: String,
     },
     LoadIntConst {
         value: i64,
-        dest: IRVar,
+        dest: String,
     },
     Copy {
-        source: IRVar,
-        dest: IRVar,
+        source: String,
+        dest: String,
     },
     Call {
-        fun: IRVar,
-        args: Vec<IRVar>,
-        dest: IRVar,
+        fun: String,
+        args: Vec<String>,
+        dest: String,
     },
     Jump {
-        label: Label,
+        label: String,
     },
     CondJump {
-        cond: IRVar,
-        then_label: Label,
-        else_label: Label,
+        cond: String,
+        then_label: String,
+        else_label: String,
     },
     Label {
-        name: Label,
+        name: String,
     },
     Return,
 }

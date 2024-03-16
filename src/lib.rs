@@ -1,4 +1,3 @@
-/// Abstract source tree structs.
 pub mod assembler;
 pub mod assembly_generator;
 pub mod ast;

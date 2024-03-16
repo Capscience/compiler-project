@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{Expr, ExprKind, Type},
-    ir::{IRVar, Instruction},
+    ir::Instruction,
     variable::SymbolTable,
 };
 
@@ -27,14 +27,14 @@ impl IRGenerator {
         }
     }
 
-    fn new_var(&mut self, t: Type) -> IRVar {
+    fn new_var(&mut self, t: Type) -> String {
         let name = format!("x{}", self.var_number);
         self.var_number += 1;
         self.var_types.insert(name.clone(), t);
         name
     }
 
-    fn new_label(&mut self) -> IRVar {
+    fn new_label(&mut self) -> String {
         let name = format!("L{}", self.label_number);
         self.label_number += 1;
         name
@@ -44,7 +44,7 @@ impl IRGenerator {
         self.instructions.push(instruction);
     }
 
-    pub fn visit(&mut self, symbol_table: &mut SymbolTable<IRVar>, expr: &Expr) -> IRVar {
+    pub fn visit(&mut self, symbol_table: &mut SymbolTable<String>, expr: &Expr) -> String {
         let mut var = String::new();
         match &expr.content {
             ExprKind::Literal { value } => match expr.type_ {

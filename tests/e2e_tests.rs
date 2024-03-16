@@ -111,14 +111,13 @@ impl E2ETests {
             .stdin
             .take()
             .expect("Failed to open test program stdin!");
-        // std::thread::spawn(move || {
+
         for input in inputs {
             print!("{input}");
             stdin
                 .write_all(input.as_bytes())
                 .expect("Failed to write to test program stdin!");
         }
-        // });
 
         let program_output = program.wait_with_output();
 
