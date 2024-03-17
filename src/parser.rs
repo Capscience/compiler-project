@@ -81,6 +81,10 @@ impl Parser {
                     self.consume(Some(vec![";"]));
                     block.push(ExprKind::None.into());
                 }
+                "fun" => {
+                    let func = *self.parse_fun_definition()?;
+                    self.module.functions.push(func);
+                }
                 _ => {
                     let expressions = block.expressions().expect("Should be block");
                     if expressions.is_empty()
@@ -123,6 +127,52 @@ impl Parser {
             return Err("Expected expression, found nothing".to_string());
         }
         Ok(block.into())
+    }
+
+    fn parse_fun_definition(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["fun"]));
+        let func: String = self
+            .consume(None)
+            .ok_or("Expected function name, got EOF".to_string())?;
+        self.consume(Some(vec!["("]))
+            .ok_or("Expected `(`, got something else!".to_string())?;
+        let mut params = Vec::new();
+        let mut param_types = Vec::new();
+        while let Some(token) = self.iter.peek() {
+            if token.text == ")" {
+                self.consume(Some(vec![")"]));
+                break;
+            };
+            params.push(
+                self.consume(None)
+                    .ok_or("Expected function parameters or ), got EOF!".to_string())?,
+            );
+            self.consume(Some(vec![":"]))
+                .ok_or("Function parameters must have types specified!".to_string())?;
+            param_types.push(
+                self.consume(None)
+                    .ok_or("Expected parameter type, got EOF!".to_string())?,
+            );
+        }
+        let return_type = if self.consume(Some(vec![":"])).is_some() {
+            self.consume(None)
+        } else {
+            None
+        };
+        println!("{:?}", self.iter.peek());
+        if self.consume(Some(vec!["{"])).is_none() {
+            return Err("Expected function block, got something else!".to_string());
+        }
+        let block = self.parse_block()?;
+        self.consume(Some(vec![";"]));
+        Ok(ExprKind::FunDef {
+            name: func,
+            params,
+            param_types,
+            return_type,
+            block,
+        }
+        .into())
     }
 
     fn parse_expr(&mut self) -> Result<Box<Expr>, String> {
@@ -306,6 +356,7 @@ impl Parser {
             "if" => return self.parse_if_expression(),
             "var" => return self.parse_var_declaration(),
             "while" => return self.parse_while(),
+            "return" => return self.parse_return(),
             "-" | "not" => return self.parse_unary(),
             _ => {} // Continue according to token type
         }
@@ -315,6 +366,15 @@ impl Parser {
             TokenType::Identifier => self.parse_identifier(),
             _ => Err(format!("Expected IntLiteral, got {:?}", token.text)),
         }
+    }
+
+    fn parse_return(&mut self) -> Result<Box<Expr>, String> {
+        self.consume(Some(vec!["return"]))
+            .expect("Parse return should never be called if next token is not return!");
+        let expr = self.parse_expr()?;
+        self.consume(Some(vec![";"]))
+            .ok_or("Return statement must end with `;`!".to_string())?;
+        Ok(ExprKind::Return { expr }.into())
     }
 
     fn parse_unary(&mut self) -> Result<Box<Expr>, String> {
@@ -472,6 +532,51 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_function_definition() {
+        let module = parse_module(&tokenize("fun square(x: Int): Int { return x * x; } 0"));
+        assert_eq!(
+            module.unwrap(),
+            Module {
+                main: Some(
+                    ExprKind::Block {
+                        expressions: vec![ExprKind::Literal {
+                            value: "0".to_string()
+                        }
+                        .into()]
+                    }
+                    .into()
+                ),
+                functions: vec![ExprKind::FunDef {
+                    name: "square".to_string(),
+                    params: vec!["x".to_string()],
+                    param_types: vec!["Int".to_string()],
+                    return_type: Some("Int".to_string()),
+                    block: ExprKind::Block {
+                        expressions: vec![ExprKind::Return {
+                            expr: ExprKind::BinaryOperation {
+                                left: ExprKind::Identifier {
+                                    value: "x".to_string()
+                                }
+                                .into(),
+                                operation: "*".to_string(),
+                                right: ExprKind::Identifier {
+                                    value: "x".to_string()
+                                }
+                                .into()
+                            }
+                            .into()
+                        }
+                        .into()]
+                    }
+                    .into()
+                }
+                .into()]
+            }
+            .into()
+        )
+    }
 
     #[test]
     fn test_module() {
