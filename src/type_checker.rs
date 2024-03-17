@@ -40,6 +40,11 @@ impl TypeChecker {
     }
 
     pub fn typecheck_module(&mut self, mut module: Module) -> Result<Module, String> {
+        if let Some(main) = &mut module.main {
+            let _ = self.typecheck(main)?;
+        } else {
+            return Err("Top level does not exist!".to_string());
+        }
         for node in &mut module.functions {
             let _ = self.typecheck(node)?;
         }
