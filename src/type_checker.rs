@@ -1,4 +1,4 @@
-use crate::ast::{Expr, ExprKind, Type};
+use crate::ast::{Expr, ExprKind, Module, Type};
 use crate::variable::SymbolTable;
 use std::mem::discriminant;
 
@@ -37,6 +37,13 @@ impl TypeChecker {
             },
         );
         TypeChecker { symbol_table }
+    }
+
+    pub fn typecheck_module(&mut self, mut module: Module) -> Result<Module, String> {
+        for node in &mut module.exprs {
+            let _ = self.typecheck(node)?;
+        }
+        Ok(module)
     }
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
@@ -243,6 +250,30 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_module() {
+        let mut checker = TypeChecker::new();
+        assert_eq!(
+            checker
+                .typecheck_module(Module {
+                    exprs: vec![ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()]
+                })
+                .unwrap(),
+            Module {
+                exprs: vec![Expr {
+                    content: ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into(),
+                    type_: Type::Bool
+                }]
+            }
+        );
+    }
 
     #[test]
     fn test_while_invalid_cond() {

@@ -8,8 +8,11 @@ struct Parser {
     module: Module,
 }
 
-pub fn parse_module(_tokens: &[Token]) -> Result<Module, String> {
-    Err("Not implemented yet!".to_string())
+pub fn parse_module(tokens: &[Token]) -> Result<Module, String> {
+    let mut parser = Parser::new(tokens);
+    let top_level = parser.parse()?;
+    parser.module.exprs.push(top_level);
+    Ok(parser.module)
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Expr, String> {
@@ -469,6 +472,23 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::tokenizer::tokenize;
+
+    #[test]
+    fn test_module() {
+        let module = parse_module(&tokenize("true"));
+        assert_eq!(
+            module.unwrap(),
+            Module {
+                exprs: vec![ExprKind::Block {
+                    expressions: vec![ExprKind::Literal {
+                        value: "true".to_string()
+                    }
+                    .into()]
+                }
+                .into()]
+            }
+        )
+    }
 
     #[test]
     fn test_and() {

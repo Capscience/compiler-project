@@ -1,5 +1,6 @@
+#[derive(Debug, PartialEq)]
 pub struct Module {
-    exprs: Vec<Expr>,
+    pub exprs: Vec<Expr>,
 }
 
 impl Module {
