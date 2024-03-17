@@ -53,6 +53,7 @@ impl TypeChecker {
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
+            ExprKind::Return { .. } => todo!(),
             ExprKind::FunDef { .. } => todo!(),
             ExprKind::Literal { value } => {
                 if value.parse::<bool>().is_ok() {

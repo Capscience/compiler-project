@@ -21,6 +21,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, node: &Expr) -> Result<Value, Box<dyn Error>> {
         let value = match &node.content {
+            ExprKind::Return { .. } => todo!(),
             ExprKind::FunDef { .. } => todo!(),
             ExprKind::Literal { value } => {
                 if let Ok(val) = value.parse::<bool>() {

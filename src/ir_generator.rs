@@ -58,6 +58,7 @@ impl IRGenerator {
     pub fn visit(&mut self, symbol_table: &mut SymbolTable<String>, expr: &Expr) -> String {
         let mut var = String::new();
         match &expr.content {
+            ExprKind::Return { .. } => todo!(),
             ExprKind::FunDef { .. } => todo!(),
             ExprKind::Literal { value } => match expr.type_ {
                 Type::Int => {

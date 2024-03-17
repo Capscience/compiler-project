@@ -104,6 +104,9 @@ pub enum ExprKind {
         return_type: Option<String>,
         block: Box<Expr>,
     },
+    Return {
+        expr: Box<Expr>,
+    },
     None,
 }
 
