@@ -11,7 +11,7 @@ struct Parser {
 pub fn parse_module(tokens: &[Token]) -> Result<Module, String> {
     let mut parser = Parser::new(tokens);
     let top_level = parser.parse()?;
-    parser.module.exprs.push(top_level);
+    parser.module.main = Some(top_level);
     Ok(parser.module)
 }
 
@@ -479,13 +479,16 @@ mod tests {
         assert_eq!(
             module.unwrap(),
             Module {
-                exprs: vec![ExprKind::Block {
-                    expressions: vec![ExprKind::Literal {
-                        value: "true".to_string()
+                main: Some(
+                    ExprKind::Block {
+                        expressions: vec![ExprKind::Literal {
+                            value: "true".to_string()
+                        }
+                        .into()]
                     }
-                    .into()]
-                }
-                .into()]
+                    .into()
+                ),
+                exprs: Vec::new(),
             }
         )
     }

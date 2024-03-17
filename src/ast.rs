@@ -1,11 +1,15 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Module {
-    pub exprs: Vec<Expr>,
+    pub main: Option<Expr>,
+    pub functions: Vec<Expr>,
 }
 
 impl Module {
     pub fn new() -> Self {
-        Self { exprs: Vec::new() }
+        Self {
+            main: None,
+            functions: Vec::new(),
+        }
     }
 }
 

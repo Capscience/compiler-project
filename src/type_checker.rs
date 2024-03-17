@@ -40,7 +40,7 @@ impl TypeChecker {
     }
 
     pub fn typecheck_module(&mut self, mut module: Module) -> Result<Module, String> {
-        for node in &mut module.exprs {
+        for node in &mut module.functions {
             let _ = self.typecheck(node)?;
         }
         Ok(module)
@@ -257,20 +257,24 @@ mod tests {
         assert_eq!(
             checker
                 .typecheck_module(Module {
-                    exprs: vec![ExprKind::Literal {
-                        value: "true".to_string()
-                    }
-                    .into()]
+                    main: Some(
+                        ExprKind::Literal {
+                            value: "true".to_string()
+                        }
+                        .into()
+                    ),
+                    functions: Vec::new(),
                 })
                 .unwrap(),
             Module {
-                exprs: vec![Expr {
+                main: Some(Expr {
                     content: ExprKind::Literal {
                         value: "true".to_string()
                     }
                     .into(),
                     type_: Type::Bool
-                }]
+                }),
+                functions: Vec::new(),
             }
         );
     }
