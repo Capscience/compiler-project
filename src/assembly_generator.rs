@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::ir::Instruction;
 
 const ASM_START: &str = "
-    .extern printf
     .global main
     .type main, @function
 
@@ -14,6 +13,134 @@ main:
     movq %rsp, %rbp";
 
 const PARAM_REGISTERS: [&str; 6] = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
+
+struct AssemblyGenerator {
+    lines: Vec<String>,
+    functions: HashMap<String, Vec<Instruction>>,
+}
+
+impl AssemblyGenerator {
+    pub fn new(functions: HashMap<String, Vec<Instruction>>) -> Self {
+        let mut lines = Vec::new();
+        println!("{:?}", functions);
+        for func in functions.keys() {
+            lines.push(format!("    .global {func}"));
+            lines.push(format!("    .type {func}, @function"));
+        }
+
+        lines.push("    .section .text".to_string());
+        Self { lines, functions }
+    }
+
+    pub fn generate_all(&mut self) {
+        for (fun, instructions) in self.functions.clone() {
+            self.generate_function(fun.to_string(), &instructions);
+        }
+    }
+
+    pub fn emit(&mut self, line: String) {
+        self.lines.push(line);
+    }
+
+    pub fn output(&mut self) -> String {
+        let mut asm = self.lines.join("\n");
+        asm.push('\n');
+        asm
+    }
+
+    pub fn generate_function(&mut self, name: String, instructions: &[Instruction]) {
+        let locals = Locals::new(get_all_variables(instructions));
+        self.emit(format!("{name}:"));
+        self.emit("    pushq %rbp".to_string());
+        self.emit("    movq %rsp, %rbp".to_string());
+        self.emit(format!("    subq ${}, %rsp", locals.stack_used()));
+
+        for instruction in instructions {
+            self.emit(format!("\n# {}", instruction.to_string()));
+            match instruction {
+                Instruction::Return => {
+                    self.emit(".Lend:".to_string());
+                    self.emit("movq $0, %rax".to_string());
+                    self.emit("movq %rbp, %rsp".to_string());
+                    self.emit("popq %rbp".to_string());
+                    self.emit("ret".to_string());
+                }
+                Instruction::Label { name } => self.emit(format!(".{name}:")),
+                Instruction::Jump { label } => self.emit(format!("jmp .{label}")),
+                Instruction::LoadIntConst { value, dest } => {
+                    if -(2_i64.pow(31)) <= *value && *value < 2_i64.pow(31) {
+                        self.emit(format!(
+                            "movq ${value}, {}",
+                            locals
+                                .get_ref(dest.to_string())
+                                .expect("IR variable does not exist!")
+                        ));
+                    } else {
+                        self.emit(format!("movabsq ${value}, %rax"));
+                        self.emit(format!(
+                            "movq %rax, {}",
+                            locals
+                                .get_ref(dest.to_string())
+                                .expect("IR variable does not exist!")
+                        ))
+                    }
+                }
+                Instruction::LoadBoolConst { value, dest } => {
+                    let value = if *value { 1 } else { 0 };
+                    self.emit(format!(
+                        "movq ${value}, {}",
+                        locals
+                            .get_ref(dest.to_string())
+                            .expect("IR variable does not exist!")
+                    ))
+                }
+                Instruction::CondJump {
+                    cond,
+                    then_label,
+                    else_label,
+                } => {
+                    self.emit(format!(
+                        "cmpq $0, {}",
+                        locals
+                            .get_ref(cond.to_string())
+                            .expect("IR variable does not exist!")
+                    ));
+                    self.emit(format!("jne .{then_label}"));
+                    self.emit(format!("jmp .{else_label}"));
+                }
+                Instruction::Copy { source, dest } => {
+                    let src_ref = locals
+                        .get_ref(source.to_string())
+                        .expect("IR variable does not exist!");
+                    let dest_ref = locals
+                        .get_ref(dest.to_string())
+                        .expect("IR variable does not exist!");
+                    self.emit(format!("movq {src_ref}, %rax"));
+                    self.emit(format!("movq %rax, {dest_ref}"));
+                }
+                Instruction::Call { fun, args, dest } => {
+                    let arg_refs = args
+                        .iter()
+                        .map(|arg| {
+                            locals
+                                .get_ref(arg.to_string())
+                                .expect("IR variable does not exist!")
+                                .to_string()
+                        })
+                        .collect();
+                    self.emit(generate_call(
+                        fun.to_string(),
+                        arg_refs,
+                        locals
+                            .get_ref(dest.to_string())
+                            .expect("IR variable does not exist!")
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+    }
+}
 
 struct Locals {
     var_to_location: HashMap<String, String>,
@@ -43,115 +170,10 @@ impl Locals {
     }
 }
 
-pub fn generate_assembly(instructions: &[Instruction]) -> String {
-    let mut lines = Vec::new();
-    let mut emit = |line: &str| {
-        lines.push(line.to_string());
-    };
-
-    let locals = Locals::new(get_all_variables(instructions));
-    emit(ASM_START);
-    emit(format!("    subq ${}, %rsp", locals.stack_used()).as_str());
-
-    for instruction in instructions {
-        emit(format!("\n# {}", instruction.to_string()).as_str());
-        match instruction {
-            Instruction::Return => {
-                emit("movq $0, %rax");
-                emit("movq %rbp, %rsp");
-                emit("popq %rbp");
-                emit("ret");
-            }
-            Instruction::Label { name } => emit(format!(".{name}:").as_str()),
-            Instruction::Jump { label } => emit(format!("jmp .{label}").as_str()),
-            Instruction::LoadIntConst { value, dest } => {
-                if -(2_i64.pow(31)) <= *value && *value < 2_i64.pow(31) {
-                    emit(
-                        format!(
-                            "movq ${value}, {}",
-                            locals
-                                .get_ref(dest.to_string())
-                                .expect("IR variable does not exist!")
-                        )
-                        .as_str(),
-                    );
-                } else {
-                    emit(format!("movabsq ${value}, %rax").as_str());
-                    emit(
-                        format!(
-                            "movq %rax, {}",
-                            locals
-                                .get_ref(dest.to_string())
-                                .expect("IR variable does not exist!")
-                        )
-                        .as_str(),
-                    )
-                }
-            }
-            Instruction::LoadBoolConst { value, dest } => {
-                let value = if *value { 1 } else { 0 };
-                emit(
-                    format!(
-                        "movq ${value}, {}",
-                        locals
-                            .get_ref(dest.to_string())
-                            .expect("IR variable does not exist!")
-                    )
-                    .as_str(),
-                )
-            }
-            Instruction::CondJump {
-                cond,
-                then_label,
-                else_label,
-            } => {
-                emit(
-                    format!(
-                        "cmpq $0, {}",
-                        locals
-                            .get_ref(cond.to_string())
-                            .expect("IR variable does not exist!")
-                    )
-                    .as_str(),
-                );
-                emit(format!("jne .{then_label}").as_str());
-                emit(format!("jmp .{else_label}").as_str());
-            }
-            Instruction::Copy { source, dest } => {
-                let src_ref = locals
-                    .get_ref(source.to_string())
-                    .expect("IR variable does not exist!");
-                let dest_ref = locals
-                    .get_ref(dest.to_string())
-                    .expect("IR variable does not exist!");
-                emit(format!("movq {src_ref}, %rax").as_str());
-                emit(format!("movq %rax, {dest_ref}").as_str());
-            }
-            Instruction::Call { fun, args, dest } => {
-                let arg_refs = args
-                    .iter()
-                    .map(|arg| {
-                        locals
-                            .get_ref(arg.to_string())
-                            .expect("IR variable does not exist!")
-                            .to_string()
-                    })
-                    .collect();
-                emit(&generate_call(
-                    fun.to_string(),
-                    arg_refs,
-                    locals
-                        .get_ref(dest.to_string())
-                        .expect("IR variable does not exist!")
-                        .to_string(),
-                ));
-            }
-        }
-    }
-
-    let mut asm = lines.join("\n");
-    asm.push('\n');
-    asm
+pub fn generate_assembly(functions: HashMap<String, Vec<Instruction>>) -> String {
+    let mut generator = AssemblyGenerator::new(functions);
+    generator.generate_all();
+    generator.output()
 }
 
 fn generate_call(fun: String, arg_refs: Vec<String>, dest_ref: String) -> String {

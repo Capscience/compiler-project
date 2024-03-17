@@ -1,8 +1,13 @@
 use std::{collections::HashMap, env, fs, io::Write, path::PathBuf};
 
 use compiler_project::{
-    assembly_generator::generate_assembly, interpreter::Interpreter, ir::Instruction,
-    ir_generator::generate_ir, parser::parse, tokenizer::tokenize, type_checker::TypeChecker,
+    assembly_generator::generate_assembly,
+    interpreter::Interpreter,
+    ir::Instruction,
+    ir_generator::generate_ir,
+    parser::{parse, parse_module},
+    tokenizer::tokenize,
+    type_checker::TypeChecker,
 };
 
 fn main() {
@@ -121,21 +126,23 @@ fn cli_compile(codefile: PathBuf, binfile: PathBuf) {
 fn ir_gen(filename: PathBuf) {
     let code = fs::read_to_string(filename).expect("File not found!");
     let mut typechecker = TypeChecker::new();
-    let ast_result = parse(&tokenize(&code));
+    let ast_result = parse_module(&tokenize(&code));
     if let Err(error) = ast_result {
         println!("Parsing error: {error}");
         std::process::exit(1);
     }
     let mut ast = ast_result.expect("Handled above.");
-    if let Err(error) = typechecker.typecheck(&mut ast) {
+    if let Err(error) = typechecker.typecheck_module(&mut ast) {
         println!("Typecheck error: {error}");
         std::process::exit(1);
     }
     let ir = generate_ir(HashMap::new(), ast);
-    for line in ir {
-        match &line {
-            Instruction::Label { .. } => println!("\n{}", line.to_string()),
-            _ => println!("{}", line.to_string()),
+    for function in ir.values() {
+        for line in function {
+            match &line {
+                Instruction::Label { .. } => println!("\n{}", line.to_string()),
+                _ => println!("{}", line.to_string()),
+            }
         }
     }
 }
@@ -143,18 +150,18 @@ fn ir_gen(filename: PathBuf) {
 fn asm_gen(filename: PathBuf) {
     let code = fs::read_to_string(filename).expect("File not found!");
     let mut typechecker = TypeChecker::new();
-    let ast_result = parse(&tokenize(&code));
+    let ast_result = parse_module(&tokenize(&code));
     if let Err(error) = ast_result {
         println!("Parsing error: {error}");
         std::process::exit(1);
     }
     let mut ast = ast_result.expect("Handled above.");
-    if let Err(error) = typechecker.typecheck(&mut ast) {
+    if let Err(error) = typechecker.typecheck_module(&mut ast) {
         println!("Typecheck error: {error}");
         std::process::exit(1);
     }
     let instructions = generate_ir(HashMap::new(), ast);
-    let assembly = generate_assembly(&instructions);
+    let assembly = generate_assembly(instructions);
     for line in assembly.lines() {
         println!("{}", line);
     }

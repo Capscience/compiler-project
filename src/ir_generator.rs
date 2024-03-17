@@ -1,7 +1,8 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, ExprKind, Type},
+    ast::{Expr, ExprKind, Module, Type},
     ir::Instruction,
     variable::SymbolTable,
 };
@@ -11,7 +12,8 @@ pub struct IRGenerator {
     label_number: i32,
     var_types: HashMap<String, Type>,
     var_none: String,
-    instructions: Vec<Instruction>,
+    functions: HashMap<String, Vec<Instruction>>,
+    pub current_func: String,
 }
 
 impl IRGenerator {
@@ -23,7 +25,8 @@ impl IRGenerator {
             label_number: 1,
             var_types,
             var_none,
-            instructions: Vec::new(),
+            functions: HashMap::new(),
+            current_func: String::new(),
         }
     }
 
@@ -41,7 +44,15 @@ impl IRGenerator {
     }
 
     fn emit(&mut self, instruction: Instruction) {
-        self.instructions.push(instruction);
+        let instructions = self.functions.get_mut(&self.current_func);
+        if let Some(instructions) = instructions {
+            instructions.push(instruction);
+        } else {
+            panic!(
+                "Tried pushing instructions to nonexistent function {}",
+                self.current_func
+            );
+        }
     }
 
     pub fn visit(&mut self, symbol_table: &mut SymbolTable<String>, expr: &Expr) -> String {
@@ -321,7 +332,10 @@ impl IRGenerator {
     }
 }
 
-pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruction> {
+pub fn generate_ir(
+    root_types: HashMap<String, Type>,
+    module: Module,
+) -> HashMap<String, Vec<Instruction>> {
     let mut generator = IRGenerator::new(root_types.clone());
 
     let mut root_symtab: SymbolTable<String> = SymbolTable::new(None);
@@ -330,10 +344,19 @@ pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruct
             .declare(key.to_string(), key.to_string())
             .unwrap();
     }
-    generator.emit(Instruction::Label {
-        name: "Start".into(),
-    });
-    let final_result = generator.visit(&mut root_symtab, &ast);
+    // generator.emit(Instruction::Label {
+    //     name: "Start".into(),
+    // });
+    generator.current_func = "main".to_string();
+    generator
+        .functions
+        .insert(generator.current_func.clone(), Vec::new());
+    let final_result = generator.visit(
+        &mut root_symtab,
+        &module
+            .main
+            .expect("Typechecking fails if there is no main."),
+    );
     let final_type = generator
         .var_types
         .get(&final_result)
@@ -344,7 +367,7 @@ pub fn generate_ir(root_types: HashMap<String, Type>, ast: Expr) -> Vec<Instruct
         generator.emit(final_ins);
     }
     generator.emit(Instruction::Return);
-    generator.instructions
+    generator.functions
 }
 
 fn generate_final(
@@ -374,31 +397,38 @@ mod tests {
 
     #[test]
     fn test_ir_literals() {
-        let instructions = generate_ir(
+        let functions = generate_ir(
             HashMap::new(),
-            ExprKind::Block {
-                expressions: vec![
-                    Expr {
-                        type_: Type::Int,
-                        content: ExprKind::Literal { value: "1".into() },
-                    },
-                    Expr {
-                        type_: Type::Bool,
-                        content: ExprKind::Literal {
-                            value: "true".into(),
-                        },
-                    },
-                ],
-            }
-            .into(),
+            Module {
+                main: Some(
+                    ExprKind::Block {
+                        expressions: vec![
+                            Expr {
+                                type_: Type::Int,
+                                content: ExprKind::Literal { value: "1".into() },
+                            },
+                            Expr {
+                                type_: Type::Bool,
+                                content: ExprKind::Literal {
+                                    value: "true".into(),
+                                },
+                            },
+                        ],
+                    }
+                    .into(),
+                ),
+                functions: Vec::new(),
+            },
         );
 
+        let instructions = functions.get("main").expect("No main function found!");
+
         assert_eq!(
-            instructions[1].to_string(),
+            instructions[0].to_string(),
             "LoadIntConst(1, x1)".to_string()
         );
         assert_eq!(
-            instructions[2].to_string(),
+            instructions[1].to_string(),
             "LoadBoolConst(true, x2)".to_string()
         );
     }

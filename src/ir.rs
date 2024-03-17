@@ -1,5 +1,6 @@
 use std::vec;
 
+#[derive(Clone, Debug)]
 pub enum Instruction {
     LoadBoolConst {
         value: bool,

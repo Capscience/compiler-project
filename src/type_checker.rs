@@ -39,8 +39,8 @@ impl TypeChecker {
         TypeChecker { symbol_table }
     }
 
-    pub fn typecheck_module(&mut self, mut module: Module) -> Result<Module, String> {
-        if let Some(main) = &mut module.main {
+    pub fn typecheck_module(&mut self, module: &mut Module) -> Result<(), String> {
+        if let Some(ref mut main) = module.main {
             let _ = self.typecheck(main)?;
         } else {
             return Err("Top level does not exist!".to_string());
@@ -48,7 +48,7 @@ impl TypeChecker {
         for node in &mut module.functions {
             let _ = self.typecheck(node)?;
         }
-        Ok(module)
+        Ok(())
     }
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
@@ -259,28 +259,19 @@ mod tests {
     #[test]
     fn test_module() {
         let mut checker = TypeChecker::new();
+        let mut module = Module {
+            main: Some(
+                ExprKind::Literal {
+                    value: "true".to_string(),
+                }
+                .into(),
+            ),
+            functions: Vec::new(),
+        };
+        assert!(checker.typecheck_module(&mut module).is_ok());
         assert_eq!(
-            checker
-                .typecheck_module(Module {
-                    main: Some(
-                        ExprKind::Literal {
-                            value: "true".to_string()
-                        }
-                        .into()
-                    ),
-                    functions: Vec::new(),
-                })
-                .unwrap(),
-            Module {
-                main: Some(Expr {
-                    content: ExprKind::Literal {
-                        value: "true".to_string()
-                    }
-                    .into(),
-                    type_: Type::Bool
-                }),
-                functions: Vec::new(),
-            }
+            module.main.expect("Created as Some above.").type_,
+            Type::Bool
         );
     }
 

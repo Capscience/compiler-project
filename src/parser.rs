@@ -488,7 +488,7 @@ mod tests {
                     }
                     .into()
                 ),
-                exprs: Vec::new(),
+                functions: Vec::new(),
             }
         )
     }
