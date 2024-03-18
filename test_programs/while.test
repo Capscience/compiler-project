@@ -1,0 +1,13 @@
+var a: Int = read_int();
+while a != 0 do {
+	print_int(a);
+	a = read_int();
+}
+
+input 5
+prints 5
+input 1
+prints 1
+input 100
+prints 100
+input 0

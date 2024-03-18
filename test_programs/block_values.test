@@ -1,0 +1,17 @@
+if true then {
+	true
+} else {
+	false
+}
+
+prints true
+
+---
+
+if false then {
+	true
+} else {
+	false
+}
+
+prints false

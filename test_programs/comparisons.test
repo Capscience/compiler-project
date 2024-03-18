@@ -1,0 +1,45 @@
+1 < 3
+
+prints true
+
+---
+
+1 > 3
+
+prints false
+
+---
+
+1 < 1
+
+prints false
+
+---
+
+1 <= 1
+
+prints true
+
+---
+
+1 == 1
+
+prints true
+
+---
+
+1 != 1
+
+prints false
+
+---
+
+true == true
+
+prints true
+
+---
+
+false != false
+
+prints false
