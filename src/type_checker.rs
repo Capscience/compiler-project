@@ -4,6 +4,7 @@ use std::mem::discriminant;
 
 pub struct TypeChecker {
     symbol_table: SymbolTable<Type>,
+    checking_function: bool,
 }
 
 impl Default for TypeChecker {
@@ -36,7 +37,10 @@ impl TypeChecker {
                 ret_type: Type::None.into(),
             },
         );
-        TypeChecker { symbol_table }
+        TypeChecker {
+            symbol_table,
+            checking_function: false,
+        }
     }
 
     pub fn typecheck_module(&mut self, module: &mut Module) -> Result<(), String> {
@@ -53,7 +57,7 @@ impl TypeChecker {
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
-            ExprKind::Return { .. } => self.check_return()?,
+            ExprKind::Return { expr } => self.check_return(expr)?,
             ExprKind::FunDef { .. } => self.check_fun_def()?,
             ExprKind::Literal { value } => self.check_literal(value)?,
             ExprKind::Identifier { value } => self.check_identifier(value)?,
@@ -82,8 +86,13 @@ impl TypeChecker {
         Ok(type_)
     }
 
-    fn check_return(&mut self) -> Result<Type, String> {
-        todo!();
+    fn check_return(&mut self, expr: &mut Expr) -> Result<Type, String> {
+        if !self.checking_function {
+            return Err(
+                "'return' expressions can only be used inside function definitions!".to_string(),
+            );
+        }
+        self.typecheck(expr)
     }
 
     fn check_fun_def(&mut self) -> Result<Type, String> {
