@@ -19,6 +19,14 @@ Tests (including end-to-end tests) can be run by
 cargo test
 ```
 
+## Features
+I have implemented the base language and functions from the features shown on course page. This includes:
+
+- basic calculation and comparison operations
+- if ... then ... else ...
+- while ... do ...
+- functions
+
 
 ## Steps
 The project consists of the following steps:
