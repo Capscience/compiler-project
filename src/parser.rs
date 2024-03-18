@@ -159,7 +159,7 @@ impl Parser {
         } else {
             None
         };
-        println!("{:?}", self.iter.peek());
+
         if self.consume(Some(vec!["{"])).is_none() {
             return Err("Expected function block, got something else!".to_string());
         }
