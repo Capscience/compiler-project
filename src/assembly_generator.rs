@@ -2,16 +2,6 @@ use std::collections::HashMap;
 
 use crate::ir::Instruction;
 
-const ASM_START: &str = "
-    .global main
-    .type main, @function
-
-    .section .text
-
-main:
-    pushq %rbp
-    movq %rsp, %rbp";
-
 const PARAM_REGISTERS: [&str; 6] = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"];
 
 struct AssemblyGenerator {
