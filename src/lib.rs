@@ -16,7 +16,7 @@ use std::path::Path;
 use assembler::assemble;
 use assembly_generator::generate_assembly;
 use ir_generator::generate_ir;
-use parser::{parse, parse_module};
+use parser::parse_module;
 use tokenizer::tokenize;
 use type_checker::TypeChecker;
 
