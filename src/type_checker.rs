@@ -2,9 +2,11 @@ use crate::ast::{Expr, ExprKind, Module, Type};
 use crate::variable::SymbolTable;
 use std::mem::discriminant;
 
+/// fun_return_type tells if the checker is currently checking a function
+/// and helps checking function return values.
 pub struct TypeChecker {
     symbol_table: SymbolTable<Type>,
-    checking_function: bool,
+    fun_return_type: Option<Type>,
 }
 
 impl Default for TypeChecker {
@@ -39,18 +41,28 @@ impl TypeChecker {
         );
         TypeChecker {
             symbol_table,
-            checking_function: false,
+            fun_return_type: None,
+        }
+    }
+
+    fn check_type_string(var_type: &String) -> Result<Type, String> {
+        match var_type.as_str() {
+            "Int" => Ok(Type::Int),
+            "Bool" => Ok(Type::Bool),
+            "None" => Ok(Type::None),
+            _ => Err(format!("Invalid type annotation `{}`", var_type)),
         }
     }
 
     pub fn typecheck_module(&mut self, module: &mut Module) -> Result<(), String> {
+        for node in &mut module.functions {
+            let _ = self.typecheck(node)?;
+        }
+
         if let Some(ref mut main) = module.main {
             let _ = self.typecheck(main)?;
         } else {
             return Err("Top level does not exist!".to_string());
-        }
-        for node in &mut module.functions {
-            let _ = self.typecheck(node)?;
         }
         Ok(())
     }
@@ -58,7 +70,13 @@ impl TypeChecker {
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
             ExprKind::Return { expr } => self.check_return(expr)?,
-            ExprKind::FunDef { .. } => self.check_fun_def()?,
+            ExprKind::FunDef {
+                name,
+                params,
+                param_types,
+                return_type,
+                block,
+            } => self.check_fun_def(name, params, param_types, return_type, block)?,
             ExprKind::Literal { value } => self.check_literal(value)?,
             ExprKind::Identifier { value } => self.check_identifier(value)?,
             ExprKind::IfClause {
@@ -87,16 +105,74 @@ impl TypeChecker {
     }
 
     fn check_return(&mut self, expr: &mut Expr) -> Result<Type, String> {
-        if !self.checking_function {
+        if self.fun_return_type.is_none() {
             return Err(
                 "'return' expressions can only be used inside function definitions!".to_string(),
             );
         }
-        self.typecheck(expr)
+        let should_be = self
+            .fun_return_type
+            .clone()
+            .expect("Returns Err earlier if None");
+        let ret_type = self.typecheck(expr)?;
+        if ret_type != should_be {
+            Err(format!(
+                "Function with return type '{:?}' tried to return with type '{:?}'",
+                should_be, ret_type
+            ))
+        } else {
+            Ok(Type::None)
+        }
     }
 
-    fn check_fun_def(&mut self) -> Result<Type, String> {
-        todo!();
+    fn check_fun_def(
+        &mut self,
+        name: &String,
+        params: &mut [String],
+        param_types: &mut [String],
+        return_type: &mut Option<String>,
+        block: &mut Expr,
+    ) -> Result<Type, String> {
+        // A separate symtab needed when typechecking function definition
+        let mut fun_symtab: SymbolTable<Type> = SymbolTable::new(None);
+        // Set fun_symtab as self.symbol_table, old self.symbol_table backed up in fun_symtab
+        std::mem::swap(&mut self.symbol_table, &mut fun_symtab);
+
+        let ret_type: Type = if let Some(type_string) = return_type {
+            TypeChecker::check_type_string(&type_string)?
+        } else {
+            Type::None
+        };
+        self.fun_return_type = Some(ret_type.clone());
+
+        let mut checked_param_types = Vec::new();
+        for type_ in param_types {
+            checked_param_types.push(TypeChecker::check_type_string(type_)?);
+        }
+
+        for (param, type_) in params.iter().zip(checked_param_types.clone()) {
+            self.symbol_table.declare(param.to_string(), type_)?;
+        }
+
+        let block_type = self.check_block(
+            &mut block
+                .content
+                .expressions_mut()
+                .expect("This should always be block."),
+        )?;
+        if block_type != ret_type {
+            return Err(format!("Function '{name}' defined with return type '{ret_type:?}', but returns '{block_type:?}'"));
+        }
+
+        self.fun_return_type = None;
+        let type_ = Type::Func {
+            params: checked_param_types,
+            ret_type: ret_type.into(),
+        };
+        // Swap symbol tables back
+        std::mem::swap(&mut self.symbol_table, &mut fun_symtab);
+        self.symbol_table.declare(name.to_string(), type_.clone())?;
+        Ok(type_)
     }
 
     fn check_literal(&mut self, value: &String) -> Result<Type, String> {
@@ -158,18 +234,10 @@ impl TypeChecker {
                         annotated_type,
                     } => {
                         if let Some(var_type) = annotated_type {
-                            match var_type.as_str() {
-                                "Int" => self
-                                    .symbol_table
-                                    .declare(identifier.to_string(), Type::Int)?,
-                                "Bool" => self
-                                    .symbol_table
-                                    .declare(identifier.to_string(), Type::Bool)?,
-                                "None" => self
-                                    .symbol_table
-                                    .declare(identifier.to_string(), Type::None)?,
-                                _ => return Err(format!("Invalid type annotation `{}`", var_type)),
-                            };
+                            let _ = self.symbol_table.declare(
+                                identifier.to_string(),
+                                TypeChecker::check_type_string(&var_type)?,
+                            )?;
                             identifier
                         } else {
                             let _ = &self
@@ -229,17 +297,30 @@ impl TypeChecker {
         }
     }
 
-    fn check_block(&mut self, expressions: &mut [Expr]) -> Result<Type, String> {
-        self.symbol_table =
-            SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
+    fn check_block(&mut self, expressions: &mut Vec<Expr>) -> Result<Type, String> {
+        // Functions have their own symtab with param types in it
+        if self.fun_return_type.is_none() {
+            self.symbol_table =
+                SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
+        }
         let mut val = Type::None;
-        for expression in expressions {
+        for expression in &mut *expressions {
             val = self.typecheck(expression)?;
         }
-        if let Some(symbol_table) = &mut self.symbol_table.parent {
-            self.symbol_table = std::mem::take(symbol_table);
+        if self.fun_return_type.is_none() {
+            if let Some(symbol_table) = &mut self.symbol_table.parent {
+                self.symbol_table = std::mem::take(symbol_table);
+            } else {
+                return Err("Symbol table has no parent!".into());
+            }
         } else {
-            return Err("Symbol table has no parent!".into());
+            // If last expr is None and second last Return, set block type to be Return value type
+            let exprs_len = expressions.len();
+            if exprs_len > 1 && expressions[exprs_len - 1].content == ExprKind::None {
+                if let ExprKind::Return { ref expr } = expressions[exprs_len - 2].content {
+                    val = expr.type_.clone();
+                }
+            }
         }
         Ok(val)
     }
@@ -292,6 +373,99 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_valid_fun_def() {
+        let mut checker = TypeChecker::new();
+        let mut expr: Expr = ExprKind::FunDef {
+            name: "test".to_string(),
+            params: vec!["a".to_string()],
+            param_types: vec!["Int".to_string()],
+            return_type: Some("Int".to_string()),
+            block: ExprKind::Block {
+                expressions: vec![
+                    ExprKind::Return {
+                        expr: ExprKind::Identifier {
+                            value: "a".to_string(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    ExprKind::None.into(),
+                ],
+            }
+            .into(),
+        }
+        .into();
+        let checked = checker.typecheck(&mut expr).unwrap();
+        assert_eq!(
+            checked,
+            Type::Func {
+                params: vec![Type::Int],
+                ret_type: Type::Int.into()
+            }
+        );
+    }
+
+    #[test]
+    fn test_fun_def_missmatched_return_types() {
+        let mut checker = TypeChecker::new();
+        let mut expr: Expr = ExprKind::FunDef {
+            name: "test".to_string(),
+            params: vec!["a".to_string()],
+            param_types: vec!["Int".to_string()],
+            return_type: Some("Int".to_string()),
+            block: ExprKind::Block {
+                expressions: vec![
+                    ExprKind::Return {
+                        expr: ExprKind::Identifier {
+                            value: "a".to_string(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    ExprKind::Literal {
+                        value: "true".to_string(),
+                    }
+                    .into(),
+                ],
+            }
+            .into(),
+        }
+        .into();
+        assert!(checker.typecheck(&mut expr).is_err());
+    }
+
+    #[test]
+    fn test_fun_def_one_wrong_return_type() {
+        let mut checker = TypeChecker::new();
+        let mut expr: Expr = ExprKind::FunDef {
+            name: "test".to_string(),
+            params: vec!["a".to_string()],
+            param_types: vec!["Int".to_string()],
+            return_type: Some("Bool".to_string()),
+            block: ExprKind::Block {
+                expressions: vec![
+                    ExprKind::Return {
+                        expr: ExprKind::Identifier {
+                            value: "a".to_string(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    ExprKind::Literal {
+                        value: "true".to_string(),
+                    }
+                    .into(),
+                ],
+            }
+            .into(),
+        }
+        .into();
+        let checked = checker.typecheck(&mut expr);
+        dbg!(&checked);
+        assert!(checked.is_err());
+    }
 
     #[test]
     fn test_module() {
