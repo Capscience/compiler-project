@@ -21,6 +21,7 @@ fn main() {
             }
         },
         3 => match args[1].as_str() {
+            "interpret" => cli_interpret(args[2].clone().into()),
             "tokens" => cli_tokenize(args[2].clone().into()),
             "ast" => cli_ast(args[2].clone().into()),
             "typecheck" => cli_typecheck(args[2].clone().into()),
@@ -77,6 +78,25 @@ fn cli_interactive_interpret() {
             }
         };
     }
+}
+
+fn cli_interpret(codefile: PathBuf) {
+    let mut interpreter = Interpreter::new();
+    let code = fs::read_to_string(codefile).expect("Codefile not found!");
+    let ast_result = parse_module(&tokenize(&code));
+    if let Err(error) = &ast_result {
+        eprint!("Parsing failed with error: {error}");
+    }
+    let module = ast_result.unwrap();
+    if module.main.is_none() {
+        std::process::exit(1);
+    }
+    println!(
+        "{}",
+        interpreter
+            .interpret(&module.main.expect("Checked in previous if."))
+            .unwrap()
+    );
 }
 
 fn cli_tokenize(codefile: PathBuf) {
@@ -173,7 +193,9 @@ fn usage() {
     println!("Commands:");
     println!("\ttokens <filename>");
     println!("\tast <filename>");
+    println!("\ttypecheck <filename>");
     println!("\tinterpret");
+    println!("\tinterpret <filename>");
     println!("\tir <filename>");
     println!("\tasm <filename>");
     println!("\tcompile <filename> [output_filename]");
