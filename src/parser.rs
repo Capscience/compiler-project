@@ -372,8 +372,6 @@ impl Parser {
         self.consume(Some(vec!["return"]))
             .expect("Parse return should never be called if next token is not return!");
         let expr = self.parse_expr()?;
-        self.consume(Some(vec![";"]))
-            .ok_or("Return statement must end with `;`!".to_string())?;
         Ok(ExprKind::Return { expr }.into())
     }
 
@@ -554,21 +552,24 @@ mod tests {
                     param_types: vec!["Int".to_string()],
                     return_type: Some("Int".to_string()),
                     block: ExprKind::Block {
-                        expressions: vec![ExprKind::Return {
-                            expr: ExprKind::BinaryOperation {
-                                left: ExprKind::Identifier {
-                                    value: "x".to_string()
-                                }
-                                .into(),
-                                operation: "*".to_string(),
-                                right: ExprKind::Identifier {
-                                    value: "x".to_string()
+                        expressions: vec![
+                            ExprKind::Return {
+                                expr: ExprKind::BinaryOperation {
+                                    left: ExprKind::Identifier {
+                                        value: "x".to_string()
+                                    }
+                                    .into(),
+                                    operation: "*".to_string(),
+                                    right: ExprKind::Identifier {
+                                        value: "x".to_string()
+                                    }
+                                    .into()
                                 }
                                 .into()
                             }
-                            .into()
-                        }
-                        .into()]
+                            .into(),
+                            ExprKind::None.into()
+                        ]
                     }
                     .into()
                 }
