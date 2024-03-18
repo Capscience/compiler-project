@@ -142,4 +142,11 @@ impl ExprKind {
             _ => None,
         }
     }
+
+    pub fn expressions_mut(&mut self) -> Option<&mut Vec<Expr>> {
+        match self {
+            ExprKind::Block { expressions } => Some(expressions),
+            _ => None,
+        }
+    }
 }
