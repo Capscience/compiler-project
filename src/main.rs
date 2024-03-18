@@ -90,28 +90,28 @@ fn cli_tokenize(codefile: PathBuf) {
 
 fn cli_ast(codefile: PathBuf) {
     let code = fs::read_to_string(codefile).expect("Codefile not found!");
-    let ast_result = parse(&tokenize(&code));
+    let ast_result = parse_module(&tokenize(&code));
     if let Err(error) = &ast_result {
         eprint!("Parsing failed with error: {error}");
     }
-    let ast = ast_result.unwrap();
-    print!("{:#?}", ast);
+    let module = ast_result.unwrap();
+    print!("{:#?}", module);
     println!();
 }
 
 fn cli_typecheck(codefile: PathBuf) {
     let code = fs::read_to_string(codefile).expect("Codefile not found!");
-    let ast_result = parse(&tokenize(&code));
+    let ast_result = parse_module(&tokenize(&code));
     if let Err(error) = &ast_result {
         eprint!("Parsing failed with error: {error}");
     }
-    let mut ast = ast_result.unwrap();
+    let mut module = ast_result.unwrap();
     let mut typechecker = TypeChecker::new();
-    if let Err(error) = typechecker.typecheck(&mut ast) {
+    if let Err(error) = typechecker.typecheck_module(&mut module) {
         println!("Typecheck error: {error}");
         std::process::exit(1);
     }
-    print!("{:?}", ast);
+    print!("{:#?}", module);
     println!();
 }
 
