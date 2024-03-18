@@ -53,203 +53,230 @@ impl TypeChecker {
 
     pub fn typecheck(&mut self, node: &mut Expr) -> Result<Type, String> {
         let type_ = match &mut node.content {
-            ExprKind::Return { .. } => todo!(),
-            ExprKind::FunDef { .. } => todo!(),
-            ExprKind::Literal { value } => {
-                if value.parse::<bool>().is_ok() {
-                    Type::Bool
-                } else if value.parse::<i64>().is_ok() {
-                    Type::Int
-                } else {
-                    return Err(format!("Invalid literal '{value}'"));
-                }
-            }
-            ExprKind::Identifier { value } => {
-                let identifier_value = self.symbol_table.get(value);
-                if let Some(val) = identifier_value {
-                    val.clone()
-                } else {
-                    return Err(format!("Use of undeclared variable '{}'", value));
-                }
-            }
+            ExprKind::Return { .. } => self.check_return()?,
+            ExprKind::FunDef { .. } => self.check_fun_def()?,
+            ExprKind::Literal { value } => self.check_literal(value)?,
+            ExprKind::Identifier { value } => self.check_identifier(value)?,
             ExprKind::IfClause {
                 condition,
                 if_block,
                 else_block,
-            } => {
-                if !matches!(&self.typecheck(&mut *condition)?, Type::Bool) {
-                    return Err("If statement condition must be type `Bool`".into());
-                }
-                let if_type = self.typecheck(&mut *if_block)?;
-                if let Some(else_block) = else_block {
-                    if discriminant(&self.typecheck(&mut *else_block)?) != discriminant(&if_type) {
-                        return Err("If- and Else-blocks must have same types".into());
-                    }
-                    if_type
-                } else {
-                    if if_type != Type::None {
-                        return Err("If-block cannot return a value without an Else-block".into());
-                    }
-                    Type::None
-                }
-            }
+            } => self.check_if_clause(condition, if_block, else_block)?,
             ExprKind::BinaryOperation {
                 left,
                 operation,
                 right,
-            } => {
-                let left_expr = left;
-                let left = self.typecheck(left_expr)?;
-                let right = self.typecheck(&mut *right)?;
-                match operation.as_str() {
-                    "=" => {
-                        let var_name = match &left_expr.content {
-                            ExprKind::VarDeclaration {
-                                identifier,
-                                annotated_type,
-                            } => {
-                                if let Some(var_type) = annotated_type {
-                                    match var_type.as_str() {
-                                        "Int" => self
-                                            .symbol_table
-                                            .declare(identifier.to_string(), Type::Int)?,
-                                        "Bool" => self
-                                            .symbol_table
-                                            .declare(identifier.to_string(), Type::Bool)?,
-                                        "None" => self
-                                            .symbol_table
-                                            .declare(identifier.to_string(), Type::None)?,
-                                        _ => {
-                                            return Err(format!(
-                                                "Invalid type annotation `{}`",
-                                                var_type
-                                            ))
-                                        }
-                                    };
-                                    identifier
-                                } else {
-                                    let _ = &self
-                                        .symbol_table
-                                        .declare(identifier.to_string(), right.clone())?;
-                                    identifier
-                                }
-                            }
-                            ExprKind::Identifier { value } => value,
-                            _ => return Err("Invalid assignment!".into()),
-                        };
-
-                        self.symbol_table.set(var_name.clone(), right.clone())?;
-                        right
-                    }
-                    "==" | "!=" => {
-                        if !(matches!(&left, Type::Int) || matches!(&left, Type::Bool)) {
-                            return Err(format!(
-                                "Operator {operation} is only implemented for Int and Bool types!"
-                            ));
-                        }
-                        if discriminant(&left) != discriminant(&right) {
-                            return Err(format!(
-                                "Both operands must be same type for operator {operation}!"
-                            ));
-                        }
-                        Type::Bool
-                    }
-                    "<" | ">" | ">=" | "<=" => {
-                        if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
-                            return Err(
-                                "Both operands must be type `Int` when using comparison".into()
-                            );
-                        }
-                        Type::Bool
-                    }
-                    "+" | "-" | "*" | "/" | "%" => {
-                        if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
-                            return Err(format!(
-                                "Both operands must be type `Int` when using operator {operation}"
-                            ));
-                        }
-                        Type::Int
-                    }
-                    "and" | "or" => {
-                        if !(matches!(&left, Type::Bool) && matches!(&right, Type::Bool)) {
-                            return Err(format!(
-                                "Both operands must be type `Bool` when using operator {operation}"
-                            ));
-                        }
-                        Type::Bool
-                    }
-                    _ => {
-                        if discriminant(&left) != discriminant(&right) {
-                            return Err("Missmatched types!".into());
-                        }
-                        left
-                    }
-                }
-            }
-            ExprKind::Block { expressions } => {
-                self.symbol_table =
-                    SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
-                let mut val = Type::None;
-                for expression in expressions {
-                    val = self.typecheck(expression)?;
-                }
-                if let Some(symbol_table) = &mut self.symbol_table.parent {
-                    self.symbol_table = std::mem::take(symbol_table);
-                } else {
-                    return Err("Symbol table has no parent!".into());
-                }
-                val
-            }
+            } => self.check_bin_op(left, right, operation)?,
+            ExprKind::Block { expressions } => self.check_block(expressions)?,
             ExprKind::VarDeclaration { .. } => Type::None, // Handled in BinOp =
-            ExprKind::Unary { operator, target } => {
-                let target_type = self.typecheck(target)?;
-                if operator.as_str() == "not" && target_type == Type::Bool {
-                    Type::Bool
-                } else if operator.as_str() == "-" && target_type == Type::Int {
-                    Type::Int
-                } else {
-                    return Err(format!(
-                        "Invalid unary operator `{}` for type `{:?}`",
-                        operator, target_type
-                    ));
-                }
-            }
+            ExprKind::Unary { operator, target } => self.check_unary(operator, target)?,
             ExprKind::WhileDo {
                 condition,
                 do_block,
-            } => {
-                if self.typecheck(condition)? != Type::Bool {
-                    return Err("While loop condition must be type Bool!".into());
-                }
-                let _ = self.typecheck(do_block);
-                Type::None
-            }
-            ExprKind::Call { func, params } => {
-                let mut param_types = Vec::new();
-                for param in params {
-                    let type_result = self.typecheck(param);
-                    type_result.as_ref()?;
-                    param_types.push(type_result.unwrap());
-                }
-                if let Some(Type::Func { params, ret_type }) = self.symbol_table.get(func) {
-                    for (param_type, should_be) in param_types.iter().zip(params) {
-                        if param_type != should_be {
-                            return Err(format!(
-                                "Function call expected type `{:?}`, got `{:?}`",
-                                should_be, param_type
-                            ));
-                        }
-                    }
-                    *ret_type.clone()
-                } else {
-                    return Err(format!("Undeclared function `{func}`"));
-                }
-            }
+            } => self.check_while(condition, do_block)?,
+            ExprKind::Call { func, params } => self.check_call(params, func)?,
             ExprKind::None => Type::None,
         };
 
         node.type_ = type_.clone();
         Ok(type_)
+    }
+
+    fn check_return(&mut self) -> Result<Type, String> {
+        todo!();
+    }
+
+    fn check_fun_def(&mut self) -> Result<Type, String> {
+        todo!();
+    }
+
+    fn check_literal(&mut self, value: &String) -> Result<Type, String> {
+        if value.parse::<bool>().is_ok() {
+            Ok(Type::Bool)
+        } else if value.parse::<i64>().is_ok() {
+            Ok(Type::Int)
+        } else {
+            Err(format!("Invalid literal '{value}'"))
+        }
+    }
+
+    fn check_identifier(&mut self, value: &String) -> Result<Type, String> {
+        let identifier_value = self.symbol_table.get(value);
+        if let Some(val) = identifier_value {
+            Ok(val.clone())
+        } else {
+            Err(format!("Use of undeclared variable '{}'", value))
+        }
+    }
+
+    fn check_if_clause(
+        &mut self,
+        condition: &mut Expr,
+        if_block: &mut Expr,
+        else_block: &mut Option<Box<Expr>>,
+    ) -> Result<Type, String> {
+        if !matches!(&self.typecheck(condition)?, Type::Bool) {
+            return Err("If statement condition must be type `Bool`".into());
+        }
+        let if_type = self.typecheck(&mut *if_block)?;
+        if let Some(else_block) = else_block {
+            if discriminant(&self.typecheck(&mut *else_block)?) != discriminant(&if_type) {
+                return Err("If- and Else-blocks must have same types".into());
+            }
+            Ok(if_type)
+        } else {
+            if if_type != Type::None {
+                return Err("If-block cannot return a value without an Else-block".into());
+            }
+            Ok(Type::None)
+        }
+    }
+
+    fn check_bin_op(
+        &mut self,
+        left: &mut Expr,
+        right: &mut Expr,
+        operation: &String,
+    ) -> Result<Type, String> {
+        let left_expr = left;
+        let left = self.typecheck(left_expr)?;
+        let right = self.typecheck(&mut *right)?;
+        match operation.as_str() {
+            "=" => {
+                let var_name = match &left_expr.content {
+                    ExprKind::VarDeclaration {
+                        identifier,
+                        annotated_type,
+                    } => {
+                        if let Some(var_type) = annotated_type {
+                            match var_type.as_str() {
+                                "Int" => self
+                                    .symbol_table
+                                    .declare(identifier.to_string(), Type::Int)?,
+                                "Bool" => self
+                                    .symbol_table
+                                    .declare(identifier.to_string(), Type::Bool)?,
+                                "None" => self
+                                    .symbol_table
+                                    .declare(identifier.to_string(), Type::None)?,
+                                _ => return Err(format!("Invalid type annotation `{}`", var_type)),
+                            };
+                            identifier
+                        } else {
+                            let _ = &self
+                                .symbol_table
+                                .declare(identifier.to_string(), right.clone())?;
+                            identifier
+                        }
+                    }
+                    ExprKind::Identifier { value } => value,
+                    _ => return Err("Invalid assignment!".into()),
+                };
+
+                self.symbol_table.set(var_name.clone(), right.clone())?;
+                Ok(right)
+            }
+            "==" | "!=" => {
+                if !(matches!(&left, Type::Int) || matches!(&left, Type::Bool)) {
+                    return Err(format!(
+                        "Operator {operation} is only implemented for Int and Bool types!"
+                    ));
+                }
+                if discriminant(&left) != discriminant(&right) {
+                    return Err(format!(
+                        "Both operands must be same type for operator {operation}!"
+                    ));
+                }
+                Ok(Type::Bool)
+            }
+            "<" | ">" | ">=" | "<=" => {
+                if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
+                    return Err("Both operands must be type `Int` when using comparison".into());
+                }
+                Ok(Type::Bool)
+            }
+            "+" | "-" | "*" | "/" | "%" => {
+                if !(matches!(&left, Type::Int) && matches!(&right, Type::Int)) {
+                    return Err(format!(
+                        "Both operands must be type `Int` when using operator {operation}"
+                    ));
+                }
+                Ok(Type::Int)
+            }
+            "and" | "or" => {
+                if !(matches!(&left, Type::Bool) && matches!(&right, Type::Bool)) {
+                    return Err(format!(
+                        "Both operands must be type `Bool` when using operator {operation}"
+                    ));
+                }
+                Ok(Type::Bool)
+            }
+            _ => {
+                if discriminant(&left) != discriminant(&right) {
+                    return Err("Missmatched types!".into());
+                }
+                Ok(left)
+            }
+        }
+    }
+
+    fn check_block(&mut self, expressions: &mut [Expr]) -> Result<Type, String> {
+        self.symbol_table =
+            SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
+        let mut val = Type::None;
+        for expression in expressions {
+            val = self.typecheck(expression)?;
+        }
+        if let Some(symbol_table) = &mut self.symbol_table.parent {
+            self.symbol_table = std::mem::take(symbol_table);
+        } else {
+            return Err("Symbol table has no parent!".into());
+        }
+        Ok(val)
+    }
+
+    fn check_unary(&mut self, operator: &String, target: &mut Expr) -> Result<Type, String> {
+        let target_type = self.typecheck(target)?;
+        if operator.as_str() == "not" && target_type == Type::Bool {
+            Ok(Type::Bool)
+        } else if operator.as_str() == "-" && target_type == Type::Int {
+            Ok(Type::Int)
+        } else {
+            Err(format!(
+                "Invalid unary operator `{}` for type `{:?}`",
+                operator, target_type
+            ))
+        }
+    }
+
+    fn check_while(&mut self, condition: &mut Expr, do_block: &mut Expr) -> Result<Type, String> {
+        if self.typecheck(condition)? != Type::Bool {
+            return Err("While loop condition must be type Bool!".into());
+        }
+        let _ = self.typecheck(do_block);
+        Ok(Type::None)
+    }
+
+    fn check_call(&mut self, params: &mut [Expr], func: &String) -> Result<Type, String> {
+        let mut param_types = Vec::new();
+        for param in params {
+            let type_result = self.typecheck(param);
+            type_result.as_ref()?;
+            param_types.push(type_result.unwrap());
+        }
+        if let Some(Type::Func { params, ret_type }) = self.symbol_table.get(func) {
+            for (param_type, should_be) in param_types.iter().zip(params) {
+                if param_type != should_be {
+                    return Err(format!(
+                        "Function call expected type `{:?}`, got `{:?}`",
+                        should_be, param_type
+                    ));
+                }
+            }
+            Ok(*ret_type.clone())
+        } else {
+            Err(format!("Undeclared function `{func}`"))
+        }
     }
 }
 
