@@ -36,7 +36,6 @@ impl IRGenerator {
     pub fn new_function(&mut self, name: String) {
         self.current_func = name.clone();
         self.functions.insert(name.clone(), Vec::new());
-        self.emit(Instruction::Label { name });
     }
 
     fn new_var(&mut self, t: Type) -> String {
@@ -53,7 +52,6 @@ impl IRGenerator {
     }
 
     fn emit(&mut self, instruction: Instruction) {
-        dbg!(&self.functions);
         let instructions = self.functions.get_mut(&self.current_func);
         if let Some(instructions) = instructions {
             instructions.push(instruction);
@@ -88,10 +86,13 @@ impl IRGenerator {
                 } else {
                     panic!("Typechecker thinks function '{}' is not a function!", name)
                 };
+                let mut params_ir = Vec::new();
                 for (var_name, var_type) in params.iter().zip(param_types) {
                     let ir_var = self.new_var(var_type.clone());
+                    params_ir.push(ir_var.clone());
                     let _ = self.symbol_table.declare(var_name.clone(), ir_var);
                 }
+                self.emit(Instruction::FunParams { params: params_ir });
                 let block_var = self.visit(block);
                 self.emit(Instruction::Return {
                     variable: block_var,
@@ -402,9 +403,12 @@ pub fn generate_ir(module: Module) -> HashMap<String, Vec<Instruction>> {
     if let Some(final_ins) = generate_final(final_result, final_type, return_var) {
         generator.emit(final_ins);
     }
-    generator.emit(Instruction::Return {
-        variable: "0".to_string(),
+    let zero_var = generator.new_var(Type::Int);
+    generator.emit(Instruction::LoadIntConst {
+        value: 1,
+        dest: zero_var.clone(),
     });
+    generator.emit(Instruction::Return { variable: zero_var });
     generator.functions
 }
 
@@ -459,11 +463,11 @@ mod tests {
         let instructions = functions.get("main").expect("No main function found!");
 
         assert_eq!(
-            instructions[1].to_string(),
+            instructions[0].to_string(),
             "LoadIntConst(1, x1)".to_string()
         );
         assert_eq!(
-            instructions[2].to_string(),
+            instructions[1].to_string(),
             "LoadBoolConst(true, x2)".to_string()
         );
     }

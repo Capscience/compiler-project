@@ -33,11 +33,15 @@ pub enum Instruction {
     Return {
         variable: String,
     },
+    FunParams {
+        params: Vec<String>,
+    },
 }
 
 impl Instruction {
     pub fn get_vars(&self) -> Vec<String> {
         match self {
+            Self::FunParams { params } => params.clone(),
             Self::Copy { source, dest } => vec![source.to_string(), dest.to_string()],
             Self::Call { args, dest, .. } => {
                 let mut vars = vec![dest.to_string()];
@@ -76,6 +80,7 @@ impl ToString for Instruction {
             } => format!("CondJump({cond}, {then_label}, {else_label})"),
             Self::Label { name } => format!("Label({})", name),
             Self::Return { variable } => format!("Return({})", variable),
+            Self::FunParams { .. } => String::new(), // Used just to move params to asm generation
         }
     }
 }

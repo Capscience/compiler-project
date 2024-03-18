@@ -12,7 +12,6 @@ struct AssemblyGenerator {
 impl AssemblyGenerator {
     pub fn new(functions: HashMap<String, Vec<Instruction>>) -> Self {
         let mut lines = Vec::new();
-        println!("{:?}", functions);
         for func in functions.keys() {
             lines.push(format!("    .global {func}"));
             lines.push(format!("    .type {func}, @function"));
@@ -48,12 +47,25 @@ impl AssemblyGenerator {
         for instruction in instructions {
             self.emit(format!("\n# {}", instruction.to_string()));
             match instruction {
-                Instruction::Return { variable: _ } => {
-                    self.emit(".Lend:".to_string());
-                    self.emit("movq $0, %rax".to_string());
-                    self.emit("movq %rbp, %rsp".to_string());
-                    self.emit("popq %rbp".to_string());
-                    self.emit("ret".to_string());
+                Instruction::FunParams { params } => {
+                    for (i, param) in params.iter().enumerate() {
+                        self.emit(format!(
+                            "movq {}, {}",
+                            PARAM_REGISTERS[i],
+                            locals
+                                .get_ref(param.to_string())
+                                .expect("IR variable does not exist!")
+                        ));
+                    }
+                }
+                Instruction::Return { variable } => {
+                    self.emit(format!(
+                        "movq {}, %rax",
+                        locals
+                            .get_ref(variable.to_string())
+                            .expect("IR variable does not exist!")
+                    ));
+                    self.emit(format!("jmp .L{name}"));
                 }
                 Instruction::Label { name } => self.emit(format!(".{name}:")),
                 Instruction::Jump { label } => self.emit(format!("jmp .{label}")),
@@ -129,6 +141,10 @@ impl AssemblyGenerator {
                 }
             }
         }
+        self.emit(format!(".L{}:", name));
+        self.emit("movq %rbp, %rsp".to_string());
+        self.emit("popq %rbp".to_string());
+        self.emit("ret".to_string());
     }
 }
 
