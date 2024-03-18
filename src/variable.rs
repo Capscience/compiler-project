@@ -41,7 +41,7 @@ where
     }
 
     pub fn declare(&mut self, symbol: String, value: T) -> Result<String, &str> {
-        if self.get(&symbol).is_some() {
+        if self.symbols.get(&symbol).is_some() {
             Err("Variable already exists!")
         } else {
             self.symbols.insert(symbol.clone(), value);
