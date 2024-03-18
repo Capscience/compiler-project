@@ -10,7 +10,6 @@ pub mod tokenizer;
 pub mod type_checker;
 pub mod variable;
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use assembler::assemble;
@@ -24,7 +23,7 @@ pub fn compile(code: String, output: &Path) -> Result<(), String> {
     let mut typechecker = TypeChecker::new();
     let mut ast = parse_module(&tokenize(&code))?;
     let _ = typechecker.typecheck_module(&mut ast)?;
-    let instructions = generate_ir(HashMap::new(), ast);
+    let instructions = generate_ir(ast);
     let assembly = generate_assembly(instructions);
     assemble(assembly, output);
     Ok(())

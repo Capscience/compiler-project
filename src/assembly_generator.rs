@@ -48,7 +48,7 @@ impl AssemblyGenerator {
         for instruction in instructions {
             self.emit(format!("\n# {}", instruction.to_string()));
             match instruction {
-                Instruction::Return => {
+                Instruction::Return { variable: _ } => {
                     self.emit(".Lend:".to_string());
                     self.emit("movq $0, %rax".to_string());
                     self.emit("movq %rbp, %rsp".to_string());

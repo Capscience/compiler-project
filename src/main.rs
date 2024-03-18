@@ -136,7 +136,7 @@ fn ir_gen(filename: PathBuf) {
         println!("Typecheck error: {error}");
         std::process::exit(1);
     }
-    let ir = generate_ir(HashMap::new(), ast);
+    let ir = generate_ir(ast);
     for function in ir.values() {
         for line in function {
             match &line {
@@ -160,7 +160,7 @@ fn asm_gen(filename: PathBuf) {
         println!("Typecheck error: {error}");
         std::process::exit(1);
     }
-    let instructions = generate_ir(HashMap::new(), ast);
+    let instructions = generate_ir(ast);
     let assembly = generate_assembly(instructions);
     for line in assembly.lines() {
         println!("{}", line);

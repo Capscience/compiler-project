@@ -11,23 +11,32 @@ pub struct IRGenerator {
     var_number: i32,
     label_number: i32,
     var_types: HashMap<String, Type>,
+    symbol_table: SymbolTable<String>,
     var_none: String,
     functions: HashMap<String, Vec<Instruction>>,
     pub current_func: String,
 }
 
 impl IRGenerator {
-    pub fn new(mut var_types: HashMap<String, Type>) -> Self {
+    pub fn new() -> Self {
+        let mut var_types = HashMap::new();
         let var_none = "none".to_string();
         var_types.insert(var_none.clone(), Type::None);
         Self {
             var_number: 1,
             label_number: 1,
             var_types,
+            symbol_table: SymbolTable::new(None),
             var_none,
             functions: HashMap::new(),
             current_func: String::new(),
         }
+    }
+
+    pub fn new_function(&mut self, name: String) {
+        self.current_func = name.clone();
+        self.functions.insert(name.clone(), Vec::new());
+        self.emit(Instruction::Label { name });
     }
 
     fn new_var(&mut self, t: Type) -> String {
@@ -44,22 +53,55 @@ impl IRGenerator {
     }
 
     fn emit(&mut self, instruction: Instruction) {
+        dbg!(&self.functions);
         let instructions = self.functions.get_mut(&self.current_func);
         if let Some(instructions) = instructions {
             instructions.push(instruction);
         } else {
             panic!(
-                "Tried pushing instructions to nonexistent function {}",
+                "Tried pushing instructions to nonexistent function '{}'",
                 self.current_func
             );
         }
     }
 
-    pub fn visit(&mut self, symbol_table: &mut SymbolTable<String>, expr: &Expr) -> String {
+    pub fn visit(&mut self, expr: &Expr) -> String {
         let mut var = String::new();
         match &expr.content {
-            ExprKind::Return { .. } => todo!(),
-            ExprKind::FunDef { .. } => todo!(),
+            ExprKind::Return { expr } => {
+                var = self.visit(expr);
+                self.emit(Instruction::Return {
+                    variable: var.clone(),
+                });
+            }
+            ExprKind::FunDef {
+                name,
+                params,
+                block,
+                ..
+            } => {
+                self.new_function(name.clone());
+                self.symbol_table =
+                    SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
+                let param_types = if let Type::Func { params, .. } = &expr.type_ {
+                    params
+                } else {
+                    panic!("Typechecker thinks function '{}' is not a function!", name)
+                };
+                for (var_name, var_type) in params.iter().zip(param_types) {
+                    let ir_var = self.new_var(var_type.clone());
+                    let _ = self.symbol_table.declare(var_name.clone(), ir_var);
+                }
+                let block_var = self.visit(block);
+                self.emit(Instruction::Return {
+                    variable: block_var,
+                });
+                if let Some(symbol_table) = &mut self.symbol_table.parent {
+                    self.symbol_table = std::mem::take(symbol_table);
+                } else {
+                    panic!("Symbol table has no parent!");
+                }
+            }
             ExprKind::Literal { value } => match expr.type_ {
                 Type::Int => {
                     var = self.new_var(Type::Int);
@@ -81,7 +123,8 @@ impl IRGenerator {
                 Type::Func { .. } => todo!(),
             },
             ExprKind::Identifier { value } => {
-                var = symbol_table
+                var = self
+                    .symbol_table
                     .get(value)
                     .expect("Type checker should have caught this missing value")
                     .to_string();
@@ -93,14 +136,14 @@ impl IRGenerator {
             } => {
                 let var_left = match &left.content {
                     ExprKind::VarDeclaration { identifier, .. } => {
-                        let _ = symbol_table
-                            .declare(identifier.clone(), self.new_var(expr.type_.clone()));
-                        symbol_table
+                        let ir_var = self.new_var(expr.type_.clone());
+                        let _ = self.symbol_table.declare(identifier.clone(), ir_var);
+                        self.symbol_table
                             .get(identifier)
                             .expect("This should never happen.")
                             .to_string()
                     }
-                    _ => self.visit(symbol_table, left),
+                    _ => self.visit(left),
                 };
                 match operation.as_str() {
                     "or" => {
@@ -120,7 +163,7 @@ impl IRGenerator {
                         self.emit(Instruction::Label {
                             name: or_right_label,
                         });
-                        let var_right = self.visit(symbol_table, right);
+                        let var_right = self.visit(right);
                         self.emit(Instruction::Copy {
                             source: var_right,
                             dest: var_result.clone(),
@@ -163,7 +206,7 @@ impl IRGenerator {
                         self.emit(Instruction::Label {
                             name: and_right_label,
                         });
-                        let var_right = self.visit(symbol_table, right);
+                        let var_right = self.visit(right);
                         self.emit(Instruction::Copy {
                             source: var_right,
                             dest: var_result.clone(),
@@ -192,7 +235,7 @@ impl IRGenerator {
                         var = var_result;
                     }
                     "=" => {
-                        let var_right = self.visit(symbol_table, right);
+                        let var_right = self.visit(right);
                         self.emit(Instruction::Copy {
                             source: var_right.clone(),
                             dest: var_left.clone(),
@@ -200,7 +243,7 @@ impl IRGenerator {
                         var = var_left;
                     }
                     _ => {
-                        let var_right = self.visit(symbol_table, right);
+                        let var_right = self.visit(right);
                         let var_result = self.new_var(expr.type_.clone());
                         self.emit(Instruction::Call {
                             fun: operation.to_string(),
@@ -222,7 +265,7 @@ impl IRGenerator {
                     let l_else = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, condition);
+                    let var_cond = self.visit(condition);
 
                     var = self.new_var(expr.type_.clone());
                     self.emit(Instruction::CondJump {
@@ -231,7 +274,7 @@ impl IRGenerator {
                         else_label: l_else.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    let then_return_var = self.visit(symbol_table, if_block);
+                    let then_return_var = self.visit(if_block);
                     self.emit(Instruction::Copy {
                         source: then_return_var,
                         dest: var.clone(),
@@ -240,7 +283,7 @@ impl IRGenerator {
                         label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_else });
-                    let else_return_var = self.visit(symbol_table, else_block);
+                    let else_return_var = self.visit(else_block);
                     self.emit(Instruction::Copy {
                         source: else_return_var,
                         dest: var.clone(),
@@ -251,7 +294,7 @@ impl IRGenerator {
                     let l_then = self.new_label();
                     let l_end = self.new_label();
 
-                    let var_cond = self.visit(symbol_table, condition);
+                    let var_cond = self.visit(condition);
 
                     self.emit(Instruction::CondJump {
                         cond: var_cond,
@@ -259,18 +302,18 @@ impl IRGenerator {
                         else_label: l_end.clone(),
                     });
                     self.emit(Instruction::Label { name: l_then });
-                    self.visit(symbol_table, if_block);
+                    self.visit(if_block);
                     self.emit(Instruction::Label { name: l_end });
                     var = self.var_none.clone();
                 }
             }
             ExprKind::Block { expressions } => {
                 for expr in expressions {
-                    var = self.visit(symbol_table, expr);
+                    var = self.visit(expr);
                 }
             }
             ExprKind::Unary { operator, target } => {
-                let var_target = self.visit(symbol_table, target);
+                let var_target = self.visit(target);
                 let var_result = self.new_var(expr.type_.clone());
                 self.emit(Instruction::Call {
                     fun: format!("unary_{}", operator),
@@ -291,7 +334,7 @@ impl IRGenerator {
                     name: l_while.clone(),
                 });
 
-                let var_cond = self.visit(symbol_table, condition);
+                let var_cond = self.visit(condition);
 
                 self.emit(Instruction::CondJump {
                     cond: var_cond,
@@ -300,7 +343,7 @@ impl IRGenerator {
                 });
                 self.emit(Instruction::Label { name: l_do });
                 // Do-block return value is never used, so ignore it
-                let _ = self.visit(symbol_table, do_block);
+                let _ = self.visit(do_block);
                 self.emit(Instruction::Jump { label: l_while });
                 self.emit(Instruction::Label { name: l_end });
 
@@ -319,7 +362,7 @@ impl IRGenerator {
                 var = self.new_var(ret_type);
                 let mut args = Vec::new();
                 for param in params {
-                    args.push(self.visit(symbol_table, param));
+                    args.push(self.visit(param));
                 }
                 self.emit(Instruction::Call {
                     fun: func.to_string(),
@@ -333,27 +376,19 @@ impl IRGenerator {
     }
 }
 
-pub fn generate_ir(
-    root_types: HashMap<String, Type>,
-    module: Module,
-) -> HashMap<String, Vec<Instruction>> {
-    let mut generator = IRGenerator::new(root_types.clone());
+pub fn generate_ir(module: Module) -> HashMap<String, Vec<Instruction>> {
+    let mut generator = IRGenerator::new();
 
-    let mut root_symtab: SymbolTable<String> = SymbolTable::new(None);
-    for key in root_types.keys() {
-        root_symtab
-            .declare(key.to_string(), key.to_string())
-            .unwrap();
+    for func in module.functions {
+        if let ExprKind::FunDef { .. } = &func.content {
+            generator.visit(&func);
+        }
     }
     // generator.emit(Instruction::Label {
     //     name: "Start".into(),
     // });
-    generator.current_func = "main".to_string();
-    generator
-        .functions
-        .insert(generator.current_func.clone(), Vec::new());
+    generator.new_function("main".to_string());
     let final_result = generator.visit(
-        &mut root_symtab,
         &module
             .main
             .expect("Typechecking fails if there is no main."),
@@ -367,7 +402,9 @@ pub fn generate_ir(
     if let Some(final_ins) = generate_final(final_result, final_type, return_var) {
         generator.emit(final_ins);
     }
-    generator.emit(Instruction::Return);
+    generator.emit(Instruction::Return {
+        variable: "0".to_string(),
+    });
     generator.functions
 }
 
@@ -398,38 +435,35 @@ mod tests {
 
     #[test]
     fn test_ir_literals() {
-        let functions = generate_ir(
-            HashMap::new(),
-            Module {
-                main: Some(
-                    ExprKind::Block {
-                        expressions: vec![
-                            Expr {
-                                type_: Type::Int,
-                                content: ExprKind::Literal { value: "1".into() },
+        let functions = generate_ir(Module {
+            main: Some(
+                ExprKind::Block {
+                    expressions: vec![
+                        Expr {
+                            type_: Type::Int,
+                            content: ExprKind::Literal { value: "1".into() },
+                        },
+                        Expr {
+                            type_: Type::Bool,
+                            content: ExprKind::Literal {
+                                value: "true".into(),
                             },
-                            Expr {
-                                type_: Type::Bool,
-                                content: ExprKind::Literal {
-                                    value: "true".into(),
-                                },
-                            },
-                        ],
-                    }
-                    .into(),
-                ),
-                functions: Vec::new(),
-            },
-        );
+                        },
+                    ],
+                }
+                .into(),
+            ),
+            functions: Vec::new(),
+        });
 
         let instructions = functions.get("main").expect("No main function found!");
 
         assert_eq!(
-            instructions[0].to_string(),
+            instructions[1].to_string(),
             "LoadIntConst(1, x1)".to_string()
         );
         assert_eq!(
-            instructions[1].to_string(),
+            instructions[2].to_string(),
             "LoadBoolConst(true, x2)".to_string()
         );
     }
