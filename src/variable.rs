@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 use std::{collections::HashMap, mem::discriminant};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SymbolTable<T> {
     symbols: HashMap<String, T>,
     pub parent: Option<Box<SymbolTable<T>>>,

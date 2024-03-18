@@ -54,7 +54,41 @@ impl TypeChecker {
         }
     }
 
+    fn check_function_footprint(&mut self, expr: &mut Expr) -> Result<(String, Type), String> {
+        if let ExprKind::FunDef {
+            name,
+            param_types,
+            return_type,
+            ..
+        } = &expr.content
+        {
+            let ret_type: Type = if let Some(type_string) = return_type {
+                TypeChecker::check_type_string(&type_string)?
+            } else {
+                Type::None
+            };
+            let mut checked_param_types = Vec::new();
+            for type_ in param_types {
+                checked_param_types.push(TypeChecker::check_type_string(&type_)?);
+            }
+            self.fun_return_type = Some(ret_type.clone());
+            Ok((
+                name.clone(),
+                Type::Func {
+                    params: checked_param_types,
+                    ret_type: ret_type.into(),
+                },
+            ))
+        } else {
+            Err("Expr must be a function to be able to check function footprint!".to_string())
+        }
+    }
+
     pub fn typecheck_module(&mut self, module: &mut Module) -> Result<(), String> {
+        for node in &mut module.functions {
+            let (name, type_) = self.check_function_footprint(node)?;
+            let _ = self.symbol_table.declare(name, type_);
+        }
         for node in &mut module.functions {
             let _ = self.typecheck(node)?;
         }
@@ -133,10 +167,8 @@ impl TypeChecker {
         return_type: &mut Option<String>,
         block: &mut Expr,
     ) -> Result<Type, String> {
-        // A separate symtab needed when typechecking function definition
-        let mut fun_symtab: SymbolTable<Type> = SymbolTable::new(None);
-        // Set fun_symtab as self.symbol_table, old self.symbol_table backed up in fun_symtab
-        std::mem::swap(&mut self.symbol_table, &mut fun_symtab);
+        self.symbol_table =
+            SymbolTable::new(Some(Box::new(std::mem::take(&mut self.symbol_table))));
 
         let ret_type: Type = if let Some(type_string) = return_type {
             TypeChecker::check_type_string(&type_string)?
@@ -165,13 +197,15 @@ impl TypeChecker {
         }
 
         self.fun_return_type = None;
+        if let Some(symbol_table) = &mut self.symbol_table.parent {
+            self.symbol_table = std::mem::take(symbol_table);
+        } else {
+            return Err("Symbol table has no parent!".into());
+        }
         let type_ = Type::Func {
             params: checked_param_types,
             ret_type: ret_type.into(),
         };
-        // Swap symbol tables back
-        std::mem::swap(&mut self.symbol_table, &mut fun_symtab);
-        self.symbol_table.declare(name.to_string(), type_.clone())?;
         Ok(type_)
     }
 
@@ -373,6 +407,44 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_recursion() {
+        let mut checker = TypeChecker::new();
+        let mut module: Module = Module {
+            main: Some(
+                ExprKind::Literal {
+                    value: "0".to_string(),
+                }
+                .into(),
+            ),
+            functions: vec![ExprKind::FunDef {
+                name: "test".to_string(),
+                params: vec!["a".to_string()],
+                param_types: vec!["Int".to_string()],
+                return_type: Some("Int".to_string()),
+                block: ExprKind::Block {
+                    expressions: vec![
+                        ExprKind::Return {
+                            expr: ExprKind::Call {
+                                func: "test".to_string(),
+                                params: vec![ExprKind::Identifier {
+                                    value: "a".to_string(),
+                                }
+                                .into()],
+                            }
+                            .into(),
+                        }
+                        .into(),
+                        ExprKind::None.into(),
+                    ],
+                }
+                .into(),
+            }
+            .into()],
+        };
+        assert!(checker.typecheck_module(&mut module).is_ok());
+    }
 
     #[test]
     fn test_valid_fun_def() {
